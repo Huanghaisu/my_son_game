@@ -130,7 +130,7 @@ export interface AppState {
   removeCard: (id: string) => void;
 
   // Actions — 怪兽
-  addMonsterToQueue: (monster: Omit<Monster, 'id' | 'isDefeated'>) => void;
+  addMonsterToQueue: (monster: Omit<Monster, 'id' | 'isDefeated' | 'currentHP'>) => void;
   updateMonster: (id: string, updates: Partial<Monster>) => void;
   deleteMonster: (id: string) => void;
   attackCurrentMonster: (damage: number, cardId: string) => void;
