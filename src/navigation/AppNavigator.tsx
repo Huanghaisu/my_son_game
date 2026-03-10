@@ -3,8 +3,10 @@
 // ============================================================
 
 import React from 'react';
+import { Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAppStore } from '../store/useAppStore';
 
 // Onboarding 屏幕
@@ -16,12 +18,17 @@ import SetupMonsterScreen from '../screens/onboarding/SetupMonsterScreen';
 import SetupConfirmModeScreen from '../screens/onboarding/SetupConfirmModeScreen';
 import SetupCompleteScreen from '../screens/onboarding/SetupCompleteScreen';
 
-// 占位屏幕（后续替换）
+// 儿童端屏幕
 import TaskHallScreen from '../screens/child/TaskHallScreen';
+import CardBackpackScreen from '../screens/child/CardBackpackScreen';
+import BattleScreen from '../screens/child/BattleScreen';
+import ChildShopScreen from '../screens/child/ChildShopScreen';
+
+// 家长端
 import ParentHomeScreen from '../screens/parent/ParentHomeScreen';
 
 const OnboardingStack = createStackNavigator();
-const ChildStack = createStackNavigator();
+const ChildTab = createBottomTabNavigator();
 const ParentStack = createStackNavigator();
 
 function OnboardingNavigator() {
@@ -40,10 +47,65 @@ function OnboardingNavigator() {
 
 function ChildNavigator() {
   return (
-    <ChildStack.Navigator screenOptions={{ headerShown: false }}>
-      <ChildStack.Screen name="TaskHall" component={TaskHallScreen} />
-      {/* TODO: CardBackpack, BattleScreen, ShopScreen */}
-    </ChildStack.Navigator>
+    <ChildTab.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: '#fff',
+          height: 62,
+          paddingBottom: 8,
+          borderTopWidth: 1,
+          borderTopColor: '#f0f0f0',
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+        },
+        tabBarActiveTintColor: '#FF8C00',
+        tabBarInactiveTintColor: '#aaa',
+      }}
+    >
+      <ChildTab.Screen
+        name="TaskHall"
+        component={TaskHallScreen}
+        options={{
+          tabBarLabel: '任务大厅',
+          tabBarIcon: ({ focused }) => (
+            <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>📋</Text>
+          ),
+        }}
+      />
+      <ChildTab.Screen
+        name="CardBackpack"
+        component={CardBackpackScreen}
+        options={{
+          tabBarLabel: '卡牌背包',
+          tabBarIcon: ({ focused }) => (
+            <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>🃏</Text>
+          ),
+        }}
+      />
+      <ChildTab.Screen
+        name="Battle"
+        component={BattleScreen}
+        options={{
+          tabBarLabel: '去战斗',
+          tabBarIcon: ({ focused }) => (
+            <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>⚔️</Text>
+          ),
+        }}
+      />
+      <ChildTab.Screen
+        name="ChildShop"
+        component={ChildShopScreen}
+        options={{
+          tabBarLabel: '商城',
+          tabBarIcon: ({ focused }) => (
+            <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>🏪</Text>
+          ),
+        }}
+      />
+    </ChildTab.Navigator>
   );
 }
 
