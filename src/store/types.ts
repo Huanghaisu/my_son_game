@@ -49,6 +49,7 @@ export interface Monster {
   difficulty: MonsterDifficulty; // 根据 HP 自动判定
   reward: string;         // 击倒奖励描述
   rewardIcon?: string;
+  imageUri?: string;      // 自定义怪兽图片 URI (选用 PNG)
   isDefeated: boolean;
 }
 

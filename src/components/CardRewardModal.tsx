@@ -14,6 +14,7 @@ import {
   Animated,
 } from 'react-native';
 import { Card } from '../store/types';
+import { playSound } from '../utils/soundManager';
 
 interface CardRewardModalProps {
   visible: boolean;
@@ -33,6 +34,7 @@ export default function CardRewardModal({ visible, card, onClose }: CardRewardMo
 
   useEffect(() => {
     if (visible) {
+      playSound('card_reward');
       iconSpin.setValue(0);
       btnScale.setValue(0);
       starsAnim.setValue(0);

@@ -6,8 +6,10 @@ import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { useAppStore } from '../../store/useAppStore';
 import { Monster } from '../../store/types';
 import { MONSTER_TEMPLATES, getMonsterDifficulty } from '../../constants/templates';
@@ -16,12 +18,12 @@ const BLUE = '#4A6FA5';
 const BG = '#F0F4FF';
 
 const MONSTER_ICONS = ['🍄', '☁️', '🦥', '🎈', '⭐', '🌈', '💎', '🐉', '👾', '🦕', '🌊', '🔥', '🦎', '🐙', '🌵', '🦠'];
-const REWARD_ICONS  = ['🍬', '📺', '🎮', '📖', '🎪', '🎁', '🍦', '🎡', '🍜', '🏖️', '🎠', '🏆'];
+const REWARD_ICONS = ['🍬', '📺', '🎮', '📖', '🎪', '🎁', '🍦', '🎡', '🍜', '🏖️', '🎠', '🏆'];
 
-type MonsterForm = { name: string; icon: string; maxHP: string; reward: string; rewardIcon: string };
+type MonsterForm = { name: string; icon: string; maxHP: string; reward: string; rewardIcon: string; imageUri?: string };
 
 const defaultMonsterForm = (): MonsterForm => ({
-  name: '', icon: '🍄', maxHP: '100', reward: '', rewardIcon: '🎁',
+  name: '', icon: '🍄', maxHP: '100', reward: '', rewardIcon: '🎁', imageUri: undefined,
 });
 
 const DIFF_COLORS: Record<string, string> = { easy: '#4CAF50', normal: '#FF8C00', hard: '#F44336' };
@@ -48,6 +50,26 @@ export default function MonsterManageScreen({ navigation }: any) {
     });
   };
 
+  const pickImage = async () => {
+    // 询问相册权限（推荐）
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('提示', '我们需要访问相册才能上传怪兽图片哦');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true, // 允许简单裁剪
+      aspect: [1, 1],      // 正方形裁剪
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setForm(f => ({ ...f, imageUri: result.assets[0].uri }));
+    }
+  };
+
   const handleSave = () => {
     if (!form.name.trim()) { Alert.alert('提示', '请填写怪兽名称'); return; }
     if (!form.reward.trim()) { Alert.alert('提示', '请填写击倒奖励'); return; }
@@ -60,6 +82,7 @@ export default function MonsterManageScreen({ navigation }: any) {
       difficulty: getMonsterDifficulty(hp),
       reward: form.reward.trim(),
       rewardIcon: form.rewardIcon,
+      imageUri: form.imageUri, // 存入自定义 URI
     });
     setModalVisible(false);
   };
@@ -102,7 +125,11 @@ export default function MonsterManageScreen({ navigation }: any) {
           return (
             <View key={m.id} style={[styles.card, m.isDefeated && styles.cardDefeated]}>
               <View style={styles.cardTop}>
-                <Text style={styles.monsterEmoji}>{m.icon}</Text>
+                {m.imageUri ? (
+                  <Image source={{ uri: m.imageUri }} style={styles.monsterImage} />
+                ) : (
+                  <Text style={styles.monsterEmoji}>{m.icon}</Text>
+                )}
                 <View style={styles.monsterInfo}>
                   <View style={styles.nameRow}>
                     <Text style={styles.monsterName}>{m.name}</Text>
@@ -174,22 +201,35 @@ export default function MonsterManageScreen({ navigation }: any) {
                 <View style={styles.divider} />
               </View>
 
-              {/* 怪兽图标 */}
+              {/* 怪兽图标 / 自定义图片 */}
               <View style={styles.section}>
-                <Text style={styles.label}>怪兽形象</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.iconRow}>
-                    {MONSTER_ICONS.map(ic => (
-                      <TouchableOpacity
-                        key={ic}
-                        style={[styles.iconBtn, form.icon === ic && styles.iconBtnSelected]}
-                        onPress={() => setForm(f => ({ ...f, icon: ic }))}
-                      >
-                        <Text style={styles.iconText}>{ic}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </ScrollView>
+                <Text style={styles.label}>怪兽形象（点击上传自定照片，推荐透明 PNG）</Text>
+                <View style={styles.iconContainer}>
+                  <TouchableOpacity style={styles.uploadBtn} onPress={pickImage}>
+                    {form.imageUri ? (
+                      <Image source={{ uri: form.imageUri }} style={styles.previewImg} />
+                    ) : (
+                      <View style={styles.uploadPlaceholder}>
+                        <Text style={styles.uploadIcon}>📷</Text>
+                        <Text style={styles.uploadText}>上传专属怪兽</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1, paddingRight: 20 }}>
+                    <View style={styles.iconRow}>
+                      {MONSTER_ICONS.map(ic => (
+                        <TouchableOpacity
+                          key={ic}
+                          style={[styles.iconBtn, form.icon === ic && !form.imageUri && styles.iconBtnSelected]}
+                          onPress={() => setForm(f => ({ ...f, icon: ic, imageUri: undefined }))}
+                        >
+                          <Text style={styles.iconText}>{ic}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
               </View>
 
               {/* 怪兽名称 */}
@@ -290,6 +330,7 @@ const styles = StyleSheet.create({
   cardDefeated: { opacity: 0.55 },
   cardTop: { flexDirection: 'row', marginBottom: 10 },
   monsterEmoji: { fontSize: 44, marginRight: 12, alignSelf: 'flex-start', marginTop: 4 },
+  monsterImage: { width: 52, height: 52, borderRadius: 12, marginRight: 12, marginTop: 4, resizeMode: 'cover' },
   monsterInfo: { flex: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   monsterName: { fontSize: 17, fontWeight: '700', color: '#1A1A2E' },
@@ -342,6 +383,17 @@ const styles = StyleSheet.create({
   },
   iconBtnSelected: { backgroundColor: '#FFF3E0', borderWidth: 2, borderColor: '#FF8C00' },
   iconText: { fontSize: 24 },
+
+  iconContainer: { flexDirection: 'row', alignItems: 'center' },
+  uploadBtn: {
+    width: 60, height: 60, borderRadius: 12, borderWidth: 1, borderColor: '#ccc',
+    borderStyle: 'dashed', marginRight: 12, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: '#FAFAFA', overflow: 'hidden',
+  },
+  previewImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  uploadPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  uploadIcon: { fontSize: 18, marginBottom: 2 },
+  uploadText: { fontSize: 9, color: '#888' },
 
   input: {
     borderWidth: 1.5, borderColor: '#E0E0E0', borderRadius: 12,

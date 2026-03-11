@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppStore } from '../../store/useAppStore';
 import { ShopItem, Redemption } from '../../store/types';
 import { hapticSuccess, hapticError, hapticLight } from '../../utils/haptics';
+import { playSound } from '../../utils/soundManager';
 import GoldCoin from '../../components/GoldCoin';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -56,6 +57,7 @@ export default function ChildShopScreen() {
     const success = redeemItem(selectedItem.id);
     if (success) {
       hapticSuccess();
+      playSound('shop_buy');
       setModalStep('success');
       // spring 弹出动画
       scaleAnim.setValue(0);
@@ -71,6 +73,7 @@ export default function ChildShopScreen() {
     } else {
       // 积分不足（理论上按钮已禁用，保底处理）
       hapticError();
+      playSound('error');
       setModalStep(null);
     }
   };
