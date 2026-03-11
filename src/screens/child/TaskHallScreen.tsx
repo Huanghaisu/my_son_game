@@ -78,7 +78,7 @@ export default function TaskHallScreen() {
 
         <View style={styles.headerRight}>
           <View style={styles.pointsBadge}>
-            <Text style={styles.pointsText}>⭐ {points}</Text>
+            <Text style={styles.pointsText}>🪙 {points}</Text>
           </View>
           <TouchableOpacity style={styles.gearBtn} onPress={() => setShowPINModal(true)}>
             <Text style={styles.gearIcon}>⚙️</Text>
@@ -204,7 +204,7 @@ function TaskItem({ task, onComplete }: TaskItemProps) {
             ) : null}
             <Text style={styles.statText}>⚔️ {task.attackPower}</Text>
             <Text style={[styles.statText, { color: '#FF8C00', fontWeight: '700' }]}>
-              ⭐ +{task.points}
+              🪙 +{task.points}
             </Text>
           </View>
         </View>

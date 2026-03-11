@@ -38,17 +38,13 @@ export const MONSTER_TEMPLATES: Omit<Monster, 'id' | 'isDefeated' | 'currentHP'>
   { name: '钻石怪',   icon: '💎', maxHP: 400, difficulty: 'hard',   reward: '去游乐场',   rewardIcon: '🎡' },
 ];
 
-// ---- 积分商城模板 ------------------------------------------
+// ---- 金币商城模板（儿童端金币商城默认 4 个奖励）-----------
 
 export const SHOP_ITEM_TEMPLATES: Omit<ShopItem, 'id'>[] = [
-  { name: '吃一颗糖果',    icon: '🍬', type: 'real',         costPoints: 10,  isEnabled: true },
-  { name: '看电视30分钟',  icon: '📺', type: 'real',         costPoints: 20,  isEnabled: true },
-  { name: '玩游戏30分钟',  icon: '🎮', type: 'real',         costPoints: 25,  isEnabled: true },
-  { name: '选一本新书',    icon: '📖', type: 'real',         costPoints: 50,  isEnabled: true },
-  { name: '周末去公园',    icon: '🎪', type: 'real',         costPoints: 80,  isEnabled: true },
-  { name: '小白兔',        icon: '🐰', type: 'virtual_pet',  costPoints: 100, isEnabled: true },
-  { name: '小猫咪',        icon: '🐱', type: 'virtual_pet',  costPoints: 100, isEnabled: true },
-  { name: '小狗狗',        icon: '🐶', type: 'virtual_pet',  costPoints: 120, isEnabled: true },
+  { name: '兑换零食', icon: '🍬', type: 'real', costPoints: 15,  isEnabled: true },
+  { name: '兑换饮料', icon: '🧃', type: 'real', costPoints: 20,  isEnabled: true },
+  { name: '兑换玩游戏', icon: '🎮', type: 'real', costPoints: 30, isEnabled: true },
+  { name: '兑换玩具', icon: '🪀', type: 'real', costPoints: 50,  isEnabled: true },
 ];
 
 // ---- 卡牌图标池 --------------------------------------------
