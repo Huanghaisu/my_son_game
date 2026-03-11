@@ -24,12 +24,21 @@ import CardBackpackScreen from '../screens/child/CardBackpackScreen';
 import BattleScreen from '../screens/child/BattleScreen';
 import ChildShopScreen from '../screens/child/ChildShopScreen';
 
-// 家长端
+// 家长端屏幕
 import ParentHomeScreen from '../screens/parent/ParentHomeScreen';
+import PendingTasksScreen from '../screens/parent/PendingTasksScreen';
+import ManageMenuScreen from '../screens/parent/ManageMenuScreen';
+import TaskManageScreen from '../screens/parent/TaskManageScreen';
+import MonsterManageScreen from '../screens/parent/MonsterManageScreen';
+import ShopManageScreen from '../screens/parent/ShopManageScreen';
+import ParentSettingsScreen from '../screens/parent/ParentSettingsScreen';
 
 const OnboardingStack = createStackNavigator();
 const ChildTab = createBottomTabNavigator();
-const ParentStack = createStackNavigator();
+const ParentTab = createBottomTabNavigator();
+const ManageStack = createStackNavigator();
+
+// ---- Onboarding -----------------------------------------------
 
 function OnboardingNavigator() {
   return (
@@ -44,6 +53,8 @@ function OnboardingNavigator() {
     </OnboardingStack.Navigator>
   );
 }
+
+// ---- 儿童端 ---------------------------------------------------
 
 function ChildNavigator() {
   return (
@@ -99,9 +110,9 @@ function ChildNavigator() {
         name="ChildShop"
         component={ChildShopScreen}
         options={{
-          tabBarLabel: '商城',
+          tabBarLabel: '金币商城',
           tabBarIcon: ({ focused }) => (
-            <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>🏪</Text>
+            <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>🪙</Text>
           ),
         }}
       />
@@ -109,14 +120,89 @@ function ChildNavigator() {
   );
 }
 
-function ParentNavigator() {
+// ---- 家长端管理子导航（嵌套在 管理 Tab 内）-------------------
+
+function ManageNavigator() {
   return (
-    <ParentStack.Navigator screenOptions={{ headerShown: false }}>
-      <ParentStack.Screen name="ParentHome" component={ParentHomeScreen} />
-      {/* TODO: TaskManage, MonsterManage, ShopManage, Stats, Settings */}
-    </ParentStack.Navigator>
+    <ManageStack.Navigator screenOptions={{ headerShown: false }}>
+      <ManageStack.Screen name="ManageMenu" component={ManageMenuScreen} />
+      <ManageStack.Screen name="TaskManage" component={TaskManageScreen} />
+      <ManageStack.Screen name="MonsterManage" component={MonsterManageScreen} />
+      <ManageStack.Screen name="ShopManage" component={ShopManageScreen} />
+    </ManageStack.Navigator>
   );
 }
+
+// ---- 家长端主导航（底部 Tab）---------------------------------
+
+function ParentNavigator() {
+  const pendingCount = useAppStore(
+    state => state.tasks.filter(t => t.status === 'waiting_confirm').length
+  );
+
+  return (
+    <ParentTab.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: '#fff',
+          height: 62,
+          paddingBottom: 8,
+          borderTopWidth: 1,
+          borderTopColor: '#f0f0f0',
+        },
+        tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
+        tabBarActiveTintColor: '#4A6FA5',
+        tabBarInactiveTintColor: '#aaa',
+      }}
+    >
+      <ParentTab.Screen
+        name="ParentHome"
+        component={ParentHomeScreen}
+        options={{
+          tabBarLabel: '首页',
+          tabBarIcon: ({ focused }) => (
+            <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>🏠</Text>
+          ),
+        }}
+      />
+      <ParentTab.Screen
+        name="Pending"
+        component={PendingTasksScreen}
+        options={{
+          tabBarLabel: '待确认',
+          tabBarBadge: pendingCount > 0 ? pendingCount : undefined,
+          tabBarBadgeStyle: { backgroundColor: '#FF8C00', color: '#fff', fontSize: 11 },
+          tabBarIcon: ({ focused }) => (
+            <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>⏳</Text>
+          ),
+        }}
+      />
+      <ParentTab.Screen
+        name="Manage"
+        component={ManageNavigator}
+        options={{
+          tabBarLabel: '管理',
+          tabBarIcon: ({ focused }) => (
+            <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>📊</Text>
+          ),
+        }}
+      />
+      <ParentTab.Screen
+        name="ParentSettings"
+        component={ParentSettingsScreen}
+        options={{
+          tabBarLabel: '设置',
+          tabBarIcon: ({ focused }) => (
+            <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>⚙️</Text>
+          ),
+        }}
+      />
+    </ParentTab.Navigator>
+  );
+}
+
+// ---- 根导航 --------------------------------------------------
 
 export default function AppNavigator() {
   const { settings, currentRole } = useAppStore();
