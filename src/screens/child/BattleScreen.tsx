@@ -19,6 +19,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useAppStore } from '../../store/useAppStore';
 import { Card, Monster } from '../../store/types';
 import MonsterDefeatedModal from '../../components/MonsterDefeatedModal';
+import { hapticMedium, hapticHeavy, hapticSuccess, hapticWarning } from '../../utils/haptics';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
@@ -128,6 +129,9 @@ export default function BattleScreen() {
 
     // 卡牌飞出后的统一回调：提交 store + 播放命中动效
     const afterFlyOut = () => {
+      // 触觉：普通卡中等冲击，技能卡重击
+      if (isSkill) hapticHeavy(); else hapticMedium();
+
       // 提交伤害（store 内自动移除卡牌，HP 归零时标记 isDefeated）
       attackCurrentMonster(card.attackPower, card.id);
 
@@ -193,6 +197,7 @@ export default function BattleScreen() {
 
   // ---- 怪兽击倒动画 -------------------------------------------
   const doMonsterDefeat = (monster: Monster) => {
+    hapticSuccess();
     Animated.sequence([
       Animated.timing(monsterScale, { toValue: 1.45, duration: 200, useNativeDriver: true }),
       Animated.parallel([
@@ -211,6 +216,7 @@ export default function BattleScreen() {
 
   // ---- 怪兽反击动画（仅视觉，不扣血）--------------------------
   const playCounterAttack = () => {
+    hapticWarning();
     setCounterVisible(true);
     Animated.sequence([
       Animated.timing(monsterTX, { toValue: -58, duration: 130, useNativeDriver: true }),

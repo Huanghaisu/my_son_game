@@ -16,6 +16,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { Task, Card } from '../../store/types';
 import CardRewardModal from '../../components/CardRewardModal';
 import PINModal from '../../components/PINModal';
+import { hapticSuccess, hapticLight } from '../../utils/haptics';
 
 export default function TaskHallScreen() {
   const {
@@ -40,6 +41,7 @@ export default function TaskHallScreen() {
   const completedToday = enabledTasks.filter((t) => t.status === 'completed').length;
 
   const handleCompleteTask = (taskId: string) => {
+    hapticSuccess();
     completeTask(taskId);
 
     if (settings.taskConfirmMode === 'auto') {
@@ -80,7 +82,7 @@ export default function TaskHallScreen() {
           <View style={styles.pointsBadge}>
             <Text style={styles.pointsText}>🪙 {points}</Text>
           </View>
-          <TouchableOpacity style={styles.gearBtn} onPress={() => setShowPINModal(true)}>
+          <TouchableOpacity style={styles.gearBtn} onPress={() => { hapticLight(); setShowPINModal(true); }}>
             <Text style={styles.gearIcon}>⚙️</Text>
           </TouchableOpacity>
         </View>

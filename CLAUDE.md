@@ -34,7 +34,7 @@ npx eas build --platform ios
 - **动画库**：全项目统一使用 RN 内置 `Animated` API，**禁止使用 `react-native-reanimated`**（Expo Go 内 worklets 版本冲突）
 - `app.json` 里**不要**注册 `react-native-reanimated` plugin
 - `App.tsx` 第一行必须是 `import 'react-native-gesture-handler'`
-- 无服务端，所有数据本地存储；`expo-av` 处理音效（尚未实现）
+- 无服务端，所有数据本地存储；`expo-av` 处理音效（尚未实现）；`expo-haptics` 处理触觉反馈（已实现）
 
 ## 架构概览
 
@@ -159,6 +159,8 @@ src/
 ├── store/
 │   ├── types.ts                  # 所有 TypeScript 接口（改类型从这里开始）
 │   └── useAppStore.ts            # 唯一状态源，含所有业务逻辑
+├── utils/
+│   └── haptics.ts                # 触觉反馈封装（hapticLight/Medium/Heavy/Success/Warning/Error）
 ├── constants/
 │   └── templates.ts              # 预设数据（任务/怪兽/商城模板、卡牌图标池）
 ├── navigation/
@@ -184,5 +186,5 @@ src/
 - [x] 阶段 4：儿童端任务大厅（含卡牌获得动画）
 - [x] 阶段 5：战斗系统（卡牌堆叠 + 上滑攻击 + 怪兽反击 + 击倒弹窗）
 - [x] 阶段 6：金币商城儿童端（2列网格 + 兑换确认弹窗 + 兑换记录Tab）
-- [ ] 阶段 7：音效与细节打磨
+- [ ] 阶段 7：音效与细节打磨（触觉反馈已完成；待做：伤害飘字增强、expo-av 音效接入、空状态 UI）
 - [ ] 阶段 8：上架准备

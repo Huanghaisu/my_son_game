@@ -13,6 +13,7 @@ import {
   Animated,
 } from 'react-native';
 import { Monster } from '../store/types';
+import { hapticHeavy } from '../utils/haptics';
 
 interface MonsterDefeatedModalProps {
   visible: boolean;
@@ -34,6 +35,7 @@ export default function MonsterDefeatedModal({
 
   useEffect(() => {
     if (visible) {
+      hapticHeavy();
       starSpin.setValue(0);
       Animated.parallel([
         Animated.timing(bgOpacity, { toValue: 1, duration: 250, useNativeDriver: true }),

@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppStore } from '../../store/useAppStore';
 import { ShopItem, Redemption } from '../../store/types';
+import { hapticSuccess, hapticError, hapticLight } from '../../utils/haptics';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const CARD_W = (SCREEN_W - 16 * 2 - 12) / 2; // 两列间距 12
@@ -53,6 +54,7 @@ export default function ChildShopScreen() {
     if (!selectedItem) return;
     const success = redeemItem(selectedItem.id);
     if (success) {
+      hapticSuccess();
       setModalStep('success');
       // spring 弹出动画
       scaleAnim.setValue(0);
@@ -67,6 +69,7 @@ export default function ChildShopScreen() {
       ]).start();
     } else {
       // 积分不足（理论上按钮已禁用，保底处理）
+      hapticError();
       setModalStep(null);
     }
   };
@@ -92,7 +95,7 @@ export default function ChildShopScreen() {
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={[styles.tabBtn, activeTab === 'shop' && styles.tabBtnActive]}
-          onPress={() => setActiveTab('shop')}
+          onPress={() => { hapticLight(); setActiveTab('shop'); }}
         >
           <Text style={[styles.tabBtnText, activeTab === 'shop' && styles.tabBtnTextActive]}>
             🛍️ 商城
@@ -100,7 +103,7 @@ export default function ChildShopScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tabBtn, activeTab === 'records' && styles.tabBtnActive]}
-          onPress={() => setActiveTab('records')}
+          onPress={() => { hapticLight(); setActiveTab('records'); }}
         >
           <Text style={[styles.tabBtnText, activeTab === 'records' && styles.tabBtnTextActive]}>
             📦 我的兑换
