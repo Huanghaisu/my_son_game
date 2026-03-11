@@ -223,26 +223,46 @@ function ShopCard({
 }: {
   item: ShopItem; points: number; onPress: () => void;
 }) {
-  const canAfford = points >= item.costPoints;
-  const diff = item.costPoints - points;
+  const pressScale = useRef(new Animated.Value(1)).current;
+  const canAfford  = points >= item.costPoints;
+  const diff       = item.costPoints - points;
+
+  const handlePressIn  = () => {
+    if (!canAfford) return;
+    Animated.spring(pressScale, { toValue: 0.95, useNativeDriver: true, speed: 50 }).start();
+  };
+  const handlePressOut = () =>
+    Animated.spring(pressScale, { toValue: 1, useNativeDriver: true, speed: 20 }).start();
 
   return (
-    <View style={[styles.shopCard, !canAfford && styles.shopCardDim]}>
+    <Animated.View style={[
+      styles.shopCard,
+      !canAfford && styles.shopCardDim,
+      { transform: [{ scale: pressScale }] },
+    ]}>
       <Text style={styles.shopItemIcon}>{item.icon}</Text>
       <Text style={styles.shopItemName} numberOfLines={2}>{item.name}</Text>
       <View style={styles.shopCoinRow}>
         <Text style={styles.shopCoinText}>🪙 {item.costPoints}</Text>
       </View>
       {canAfford ? (
-        <TouchableOpacity style={styles.redeemBtn} onPress={onPress} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.redeemBtn}
+          onPress={onPress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          activeOpacity={0.8}
+          accessibilityLabel={`兑换 ${item.name}，需要 ${item.costPoints} 金币`}
+          accessibilityRole="button"
+        >
           <Text style={styles.redeemBtnText}>兑换</Text>
         </TouchableOpacity>
       ) : (
-        <View style={styles.lackBtn}>
+        <View style={styles.lackBtn} accessibilityLabel={`金币不足，还差 ${diff} 金币`}>
           <Text style={styles.lackBtnText}>差 🪙{diff}</Text>
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 }
 

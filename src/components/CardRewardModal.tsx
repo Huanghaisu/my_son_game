@@ -1,5 +1,6 @@
 // ============================================================
-// 卡牌奖励弹窗 — 任务完成后的卡牌获得动画（使用 RN 内置 Animated）
+// 卡牌奖励弹窗 — 任务完成后的卡牌获得动画（RN 内置 Animated）
+// UI 优化：卡牌图标入场旋转 + 按钮弹出 + 星星脉冲
 // ============================================================
 
 import React, { useEffect, useRef } from 'react';
@@ -23,69 +24,84 @@ interface CardRewardModalProps {
 const { width } = Dimensions.get('window');
 
 export default function CardRewardModal({ visible, card, onClose }: CardRewardModalProps) {
-  const scale = useRef(new Animated.Value(0)).current;
+  const scale      = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(200)).current;
-  const bgOpacity = useRef(new Animated.Value(0)).current;
+  const bgOpacity  = useRef(new Animated.Value(0)).current;
+  const iconSpin   = useRef(new Animated.Value(0)).current;
+  const btnScale   = useRef(new Animated.Value(0)).current;
+  const starsAnim  = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
+      iconSpin.setValue(0);
+      btnScale.setValue(0);
+      starsAnim.setValue(0);
+
       Animated.parallel([
         Animated.timing(bgOpacity, {
-          toValue: 1,
-          duration: 250,
-          useNativeDriver: true,
+          toValue: 1, duration: 250, useNativeDriver: true,
         }),
         Animated.spring(scale, {
-          toValue: 1,
-          damping: 12,
-          stiffness: 150,
-          useNativeDriver: true,
+          toValue: 1, damping: 12, stiffness: 150, useNativeDriver: true,
         }),
         Animated.spring(translateY, {
-          toValue: 0,
-          damping: 14,
-          stiffness: 120,
-          useNativeDriver: true,
+          toValue: 0, damping: 14, stiffness: 120, useNativeDriver: true,
         }),
+        // 图标从斜角旋入
+        Animated.spring(iconSpin, {
+          toValue: 1, damping: 10, stiffness: 100, useNativeDriver: true,
+        }),
+        // 星星缩放出现
+        Animated.sequence([
+          Animated.delay(200),
+          Animated.spring(starsAnim, {
+            toValue: 1, damping: 8, stiffness: 120, useNativeDriver: true,
+          }),
+        ]),
       ]).start();
+
+      // 按钮延迟弹出
+      setTimeout(() => {
+        Animated.spring(btnScale, {
+          toValue: 1, damping: 9, stiffness: 160, useNativeDriver: true,
+        }).start();
+      }, 300);
+
     } else {
       Animated.parallel([
-        Animated.timing(bgOpacity, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scale, {
-          toValue: 0.6,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-        Animated.timing(translateY, {
-          toValue: 200,
-          duration: 200,
-          useNativeDriver: true,
-        }),
+        Animated.timing(bgOpacity,  { toValue: 0,   duration: 200, useNativeDriver: true }),
+        Animated.timing(scale,      { toValue: 0.6, duration: 180, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 200, duration: 200, useNativeDriver: true }),
       ]).start();
     }
   }, [visible]);
 
   if (!card) return null;
 
-  const isSkill = card.type === 'skill';
-  const cardColor = isSkill ? '#7C3AED' : '#2563EB';
+  const isSkill     = card.type === 'skill';
+  const cardColor   = isSkill ? '#7C3AED' : '#2563EB';
   const cardBgColor = isSkill ? '#EDE9FE' : '#DBEAFE';
-  const typeLabel = isSkill ? '⚡ 技能绝招卡' : '🗡️ 普通工具卡';
+  const typeLabel   = isSkill ? '⚡ 技能绝招卡' : '🗡️ 普通工具卡';
+
+  const iconRotate = iconSpin.interpolate({
+    inputRange:  [0, 1],
+    outputRange: ['-25deg', '0deg'],
+  });
+  const iconScaleVal = iconSpin.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0.4, 1],
+  });
 
   return (
     <Modal visible={visible} transparent animationType="none">
       <Animated.View style={[styles.overlay, { opacity: bgOpacity }]}>
         <Animated.View
-          style={[
-            styles.wrapper,
-            { transform: [{ scale }, { translateY }] },
-          ]}
+          style={[styles.wrapper, { transform: [{ scale }, { translateY }] }]}
         >
-          <Text style={styles.stars}>✨  ✨  ✨</Text>
+          {/* 星星装饰（缩放出现） */}
+          <Animated.Text style={[styles.stars, { transform: [{ scale: starsAnim }] }]}>
+            ✨  ✨  ✨
+          </Animated.Text>
 
           {/* 卡牌主体 */}
           <View style={[styles.card, { backgroundColor: cardBgColor, borderColor: cardColor }]}>
@@ -93,7 +109,14 @@ export default function CardRewardModal({ visible, card, onClose }: CardRewardMo
               <Text style={styles.cardTypeLabel}>{typeLabel}</Text>
             </View>
             <View style={styles.cardBody}>
-              <Text style={styles.cardIcon}>{card.icon}</Text>
+              {/* 图标旋转弹出 */}
+              <Animated.View style={{
+                transform: [{ rotate: iconRotate }, { scale: iconScaleVal }],
+                marginBottom: 12,
+              }}>
+                <Text style={styles.cardIcon}>{card.icon}</Text>
+              </Animated.View>
+
               <Text style={[styles.cardTaskName, { color: cardColor }]} numberOfLines={1}>
                 {card.taskName}
               </Text>
@@ -105,13 +128,18 @@ export default function CardRewardModal({ visible, card, onClose }: CardRewardMo
 
           <Text style={styles.rewardText}>🎉 获得了新卡牌！</Text>
 
-          <TouchableOpacity
-            style={[styles.closeBtn, { backgroundColor: cardColor }]}
-            onPress={onClose}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.closeBtnText}>太棒了！收下了！</Text>
-          </TouchableOpacity>
+          {/* 按钮延迟弹出 */}
+          <Animated.View style={{ transform: [{ scale: btnScale }] }}>
+            <TouchableOpacity
+              style={[styles.closeBtn, { backgroundColor: cardColor }]}
+              onPress={onClose}
+              activeOpacity={0.85}
+              accessibilityLabel="收下卡牌"
+              accessibilityRole="button"
+            >
+              <Text style={styles.closeBtnText}>太棒了！收下了！</Text>
+            </TouchableOpacity>
+          </Animated.View>
         </Animated.View>
       </Animated.View>
     </Modal>
@@ -162,7 +190,6 @@ const styles = StyleSheet.create({
   },
   cardIcon: {
     fontSize: 76,
-    marginBottom: 12,
   },
   cardTaskName: {
     fontSize: 22,
@@ -191,6 +218,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 36,
     paddingVertical: 16,
     borderRadius: 32,
+    minWidth: 200,
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,

@@ -1,5 +1,6 @@
 // ============================================================
-// 怪兽击倒庆祝弹窗（使用 RN 内置 Animated，非 Reanimated）
+// 怪兽击倒庆祝弹窗（RN 内置 Animated，禁用 Reanimated）
+// UI 优化：多旋转星星 + 按钮脉冲 + 积分弹跳动画
 // ============================================================
 
 import React, { useEffect, useRef } from 'react';
@@ -28,27 +29,68 @@ export default function MonsterDefeatedModal({
   monster,
   onClose,
 }: MonsterDefeatedModalProps) {
-  const scale = useRef(new Animated.Value(0)).current;
+  const scale      = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(180)).current;
-  const bgOpacity = useRef(new Animated.Value(0)).current;
-  const starSpin = useRef(new Animated.Value(0)).current;
+  const bgOpacity  = useRef(new Animated.Value(0)).current;
+
+  // 三个独立旋转星星
+  const starSpin1  = useRef(new Animated.Value(0)).current;
+  const starSpin2  = useRef(new Animated.Value(0)).current;
+  const starSpin3  = useRef(new Animated.Value(0)).current;
+
+  // 按钮脉冲
+  const btnPulse   = useRef(new Animated.Value(1)).current;
+
+  // 积分徽章弹出
+  const bonusScale = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
       hapticHeavy();
-      starSpin.setValue(0);
+      // 重置所有值
+      starSpin1.setValue(0);
+      starSpin2.setValue(0);
+      starSpin3.setValue(0);
+      bonusScale.setValue(0);
+      btnPulse.setValue(1);
+
       Animated.parallel([
+        // 遮罩渐入
         Animated.timing(bgOpacity, { toValue: 1, duration: 250, useNativeDriver: true }),
-        Animated.spring(scale, { toValue: 1, damping: 11, stiffness: 140, useNativeDriver: true }),
+        // 弹窗弹出
+        Animated.spring(scale,      { toValue: 1, damping: 11, stiffness: 140, useNativeDriver: true }),
         Animated.spring(translateY, { toValue: 0, damping: 13, stiffness: 120, useNativeDriver: true }),
+        // 三颗星循环旋转（不同方向/速度）
         Animated.loop(
-          Animated.timing(starSpin, { toValue: 1, duration: 4000, useNativeDriver: true })
+          Animated.timing(starSpin1, { toValue: 1,  duration: 3500, useNativeDriver: true })
+        ),
+        Animated.loop(
+          Animated.timing(starSpin2, { toValue: 1,  duration: 2800, useNativeDriver: true })
+        ),
+        Animated.loop(
+          Animated.timing(starSpin3, { toValue: -1, duration: 4500, useNativeDriver: true })
         ),
       ]).start();
+
+      // 积分徽章延迟弹出
+      setTimeout(() => {
+        Animated.spring(bonusScale, { toValue: 1, damping: 9, stiffness: 160, useNativeDriver: true }).start();
+      }, 350);
+
+      // 按钮脉冲（延迟后开始）
+      setTimeout(() => {
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(btnPulse, { toValue: 1.06, duration: 650, useNativeDriver: true }),
+            Animated.timing(btnPulse, { toValue: 1,    duration: 650, useNativeDriver: true }),
+          ])
+        ).start();
+      }, 500);
+
     } else {
       Animated.parallel([
-        Animated.timing(bgOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-        Animated.timing(scale, { toValue: 0.6, duration: 180, useNativeDriver: true }),
+        Animated.timing(bgOpacity,  { toValue: 0,   duration: 200, useNativeDriver: true }),
+        Animated.timing(scale,      { toValue: 0.6, duration: 180, useNativeDriver: true }),
         Animated.timing(translateY, { toValue: 180, duration: 200, useNativeDriver: true }),
       ]).start();
     }
@@ -57,23 +99,33 @@ export default function MonsterDefeatedModal({
   if (!monster) return null;
 
   const bonusPoints = Math.floor(monster.maxHP * 0.1);
-  const spinInterpolate = starSpin.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+
+  const spin1 = starSpin1.interpolate({ inputRange: [0, 1],  outputRange: ['0deg', '360deg'] });
+  const spin2 = starSpin2.interpolate({ inputRange: [0, 1],  outputRange: ['0deg', '360deg'] });
+  const spin3 = starSpin3.interpolate({ inputRange: [-1, 0], outputRange: ['-360deg', '0deg'] });
 
   return (
     <Modal visible={visible} transparent animationType="none">
       <Animated.View style={[styles.overlay, { opacity: bgOpacity }]}>
         <Animated.View style={[styles.card, { transform: [{ scale }, { translateY }] }]}>
-          {/* Spinning stars decoration */}
-          <Animated.Text style={[styles.spinStars, { transform: [{ rotate: spinInterpolate }] }]}>
+
+          {/* 左上旋转星（金色） */}
+          <Animated.Text style={[styles.star, styles.starTL, { transform: [{ rotate: spin1 }] }]}>
+            ⭐
+          </Animated.Text>
+          {/* 右上旋转星（闪光） */}
+          <Animated.Text style={[styles.star, styles.starTR, { transform: [{ rotate: spin2 }] }]}>
             ✨
           </Animated.Text>
+          {/* 右侧反向旋转星 */}
+          <Animated.Text style={[styles.star, styles.starMR, { transform: [{ rotate: spin3 }] }]}>
+            🌟
+          </Animated.Text>
 
+          {/* 标题 */}
           <Text style={styles.defeatBanner}>🎉 怪兽被击倒了！</Text>
 
-          {/* Monster icon with X overlay */}
+          {/* 怪兽图标 + X标记 */}
           <View style={styles.monsterIconWrapper}>
             <Text style={styles.monsterIcon}>{monster.icon}</Text>
             <View style={styles.defeatedX}>
@@ -83,7 +135,7 @@ export default function MonsterDefeatedModal({
 
           <Text style={styles.monsterName}>{monster.name}</Text>
 
-          {/* Reward */}
+          {/* 闯关奖励 */}
           <View style={styles.rewardBox}>
             <Text style={styles.rewardTitle}>🏆 闯关奖励</Text>
             <Text style={styles.rewardText}>
@@ -91,14 +143,24 @@ export default function MonsterDefeatedModal({
             </Text>
           </View>
 
-          {/* Bonus points */}
-          <View style={styles.bonusBox}>
-            <Text style={styles.bonusText}>⭐ 额外奖励 +{bonusPoints} 积分！</Text>
-          </View>
+          {/* 额外积分（弹出动画） */}
+          <Animated.View style={[styles.bonusBox, { transform: [{ scale: bonusScale }] }]}>
+            <Text style={styles.bonusText}>⭐ 额外奖励 +{bonusPoints} 金币！</Text>
+          </Animated.View>
 
-          <TouchableOpacity style={styles.continueBtn} onPress={onClose} activeOpacity={0.85}>
-            <Text style={styles.continueBtnText}>继续冒险！⚔️</Text>
-          </TouchableOpacity>
+          {/* 继续按钮（脉冲动画） */}
+          <Animated.View style={{ transform: [{ scale: btnPulse }] }}>
+            <TouchableOpacity
+              style={styles.continueBtn}
+              onPress={onClose}
+              activeOpacity={0.85}
+              accessibilityLabel="继续冒险"
+              accessibilityRole="button"
+            >
+              <Text style={styles.continueBtnText}>继续冒险！⚔️</Text>
+            </TouchableOpacity>
+          </Animated.View>
+
         </Animated.View>
       </Animated.View>
     </Modal>
@@ -125,12 +187,28 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 16,
   },
-  spinStars: {
+
+  // 旋转星星（绝对定位装饰）
+  star: {
     position: 'absolute',
-    top: 14,
-    right: 22,
-    fontSize: 24,
   },
+  starTL: {
+    top: 14,
+    left: 20,
+    fontSize: 22,
+  },
+  starTR: {
+    top: 12,
+    right: 20,
+    fontSize: 26,
+  },
+  starMR: {
+    top: 56,
+    right: 14,
+    fontSize: 18,
+  },
+
+  // 标题
   defeatBanner: {
     fontSize: 22,
     fontWeight: 'bold',
@@ -138,6 +216,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     textAlign: 'center',
   },
+
+  // 怪兽图标
   monsterIconWrapper: {
     position: 'relative',
     marginBottom: 8,
@@ -167,6 +247,8 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 20,
   },
+
+  // 奖励框
   rewardBox: {
     width: '100%',
     backgroundColor: '#FEF9C3',
@@ -190,6 +272,8 @@ const styles = StyleSheet.create({
     color: '#78350F',
     textAlign: 'center',
   },
+
+  // 额外积分
   bonusBox: {
     backgroundColor: '#F0FDF4',
     borderRadius: 12,
@@ -204,16 +288,20 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#166534',
   },
+
+  // 继续按钮
   continueBtn: {
     backgroundColor: '#DC2626',
     paddingHorizontal: 40,
     paddingVertical: 16,
     borderRadius: 32,
+    minWidth: 180,
+    alignItems: 'center',
     shadowColor: '#DC2626',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
   },
   continueBtnText: {
     color: '#fff',

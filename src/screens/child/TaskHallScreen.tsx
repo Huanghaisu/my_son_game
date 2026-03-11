@@ -2,7 +2,7 @@
 // 儿童端 — 任务大厅（阶段 4 完整实现）
 // ============================================================
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
+  Animated,
 } from 'react-native';
 import { useAppStore } from '../../store/useAppStore';
 import { Task, Card } from '../../store/types';
@@ -82,7 +83,13 @@ export default function TaskHallScreen() {
           <View style={styles.pointsBadge}>
             <Text style={styles.pointsText}>🪙 {points}</Text>
           </View>
-          <TouchableOpacity style={styles.gearBtn} onPress={() => { hapticLight(); setShowPINModal(true); }}>
+          <TouchableOpacity
+            style={styles.gearBtn}
+            onPress={() => { hapticLight(); setShowPINModal(true); }}
+            accessibilityLabel="家长设置"
+            accessibilityRole="button"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <Text style={styles.gearIcon}>⚙️</Text>
           </TouchableOpacity>
         </View>
@@ -176,6 +183,10 @@ interface TaskItemProps {
 }
 
 function TaskItem({ task, onComplete }: TaskItemProps) {
+  const pressScale = useRef(new Animated.Value(1)).current;
+  const handlePressIn  = () => Animated.spring(pressScale, { toValue: 0.95, useNativeDriver: true, speed: 50 }).start();
+  const handlePressOut = () => Animated.spring(pressScale, { toValue: 1,    useNativeDriver: true, speed: 20 }).start();
+
   const isHard = task.type === 'hard';
   const accentColor = isHard ? '#7C3AED' : '#16a34a';
 
@@ -217,9 +228,15 @@ function TaskItem({ task, onComplete }: TaskItemProps) {
         <TouchableOpacity
           style={[styles.completeBtn, { backgroundColor: accentColor }]}
           onPress={() => onComplete(task.id)}
-          activeOpacity={0.82}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          activeOpacity={1}
+          accessibilityLabel={`标记任务完成：${task.name}`}
+          accessibilityRole="button"
         >
-          <Text style={styles.completeBtnText}>✅  我完成了！</Text>
+          <Animated.View style={{ transform: [{ scale: pressScale }] }}>
+            <Text style={styles.completeBtnText}>✅  我完成了！</Text>
+          </Animated.View>
         </TouchableOpacity>
       )}
 
@@ -290,7 +307,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   gearBtn: {
-    padding: 4,
+    padding: 10,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   gearIcon: {
     fontSize: 26,
