@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppStore } from '../../store/useAppStore';
 import { ShopItem, Redemption } from '../../store/types';
 import { hapticSuccess, hapticError, hapticLight } from '../../utils/haptics';
+import GoldCoin from '../../components/GoldCoin';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const CARD_W = (SCREEN_W - 16 * 2 - 12) / 2; // 两列间距 12
@@ -87,7 +88,8 @@ export default function ChildShopScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>🏪 金币商城</Text>
         <View style={styles.coinBadge}>
-          <Text style={styles.coinText}>🪙 {points}</Text>
+          <GoldCoin size={18} />
+          <Text style={styles.coinText}> {points}</Text>
         </View>
       </View>
 
@@ -177,18 +179,21 @@ export default function ChildShopScreen() {
               <Text style={styles.modalItemName}>{selectedItem.name}</Text>
               <View style={styles.modalCostRow}>
                 <Text style={styles.modalCostLabel}>消耗</Text>
-                <Text style={styles.modalCostNum}>🪙 {selectedItem.costPoints}</Text>
+                <GoldCoin size={22} />
+                <Text style={styles.modalCostNum}> {selectedItem.costPoints}</Text>
               </View>
-              <Text style={styles.modalBalance}>
-                兑换后剩余：🪙 {points - selectedItem.costPoints}
-              </Text>
+              <View style={styles.modalBalanceRow}>
+                <Text style={styles.modalBalance}>兑换后剩余：</Text>
+                <GoldCoin size={14} />
+                <Text style={styles.modalBalance}> {points - selectedItem.costPoints}</Text>
+              </View>
               <Text style={styles.modalHint}>爸爸妈妈收到后会给你哦！</Text>
               <View style={styles.modalBtnRow}>
                 <TouchableOpacity style={styles.cancelBtn} onPress={handleCloseModal}>
                   <Text style={styles.cancelBtnText}>取消</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm}>
-                  <Text style={styles.confirmBtnText}>🪙 确认兑换</Text>
+                  <Text style={styles.confirmBtnText}>确认兑换</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -203,7 +208,8 @@ export default function ChildShopScreen() {
                 已通知爸爸妈妈，{'\n'}等他们给你兑现哦！
               </Text>
               <View style={styles.successCoinRow}>
-                <Text style={styles.successCoinText}>剩余金币：🪙 {points}</Text>
+                <GoldCoin size={18} />
+                <Text style={styles.successCoinText}> 剩余金币 {points}</Text>
               </View>
               <TouchableOpacity style={styles.confirmBtn} onPress={handleCloseModal}>
                 <Text style={styles.confirmBtnText}>好的！</Text>
@@ -243,7 +249,8 @@ function ShopCard({
       <Text style={styles.shopItemIcon}>{item.icon}</Text>
       <Text style={styles.shopItemName} numberOfLines={2}>{item.name}</Text>
       <View style={styles.shopCoinRow}>
-        <Text style={styles.shopCoinText}>🪙 {item.costPoints}</Text>
+        <GoldCoin size={16} />
+        <Text style={styles.shopCoinText}> {item.costPoints}</Text>
       </View>
       {canAfford ? (
         <TouchableOpacity
@@ -258,8 +265,10 @@ function ShopCard({
           <Text style={styles.redeemBtnText}>兑换</Text>
         </TouchableOpacity>
       ) : (
-        <View style={styles.lackBtn} accessibilityLabel={`金币不足，还差 ${diff} 金币`}>
-          <Text style={styles.lackBtnText}>差 🪙{diff}</Text>
+        <View style={[styles.lackBtn, styles.lackBtnRow]} accessibilityLabel={`金币不足，还差 ${diff} 金币`}>
+          <Text style={styles.lackBtnText}>差 </Text>
+          <GoldCoin size={13} />
+          <Text style={styles.lackBtnText}>{diff}</Text>
         </View>
       )}
     </Animated.View>
@@ -278,9 +287,10 @@ function RedemptionCard({ redemption }: { redemption: Redemption }) {
       <Text style={styles.recordIcon}>{redemption.itemIcon}</Text>
       <View style={styles.recordInfo}>
         <Text style={styles.recordName}>{redemption.itemName}</Text>
-        <Text style={styles.recordMeta}>
-          🪙 {redemption.costPoints} 金币  ·  {dateStr}
-        </Text>
+        <View style={styles.recordMetaRow}>
+          <GoldCoin size={13} />
+          <Text style={styles.recordMeta}> {redemption.costPoints} 金币  ·  {dateStr}</Text>
+        </View>
       </View>
       <View style={[styles.statusBadge, { backgroundColor: info.color + '22' }]}>
         <Text style={styles.statusIcon}>{info.icon}</Text>
@@ -308,6 +318,7 @@ const styles = StyleSheet.create({
   coinBadge: {
     backgroundColor: 'rgba(255,255,255,0.22)',
     paddingHorizontal: 14, paddingVertical: 6, borderRadius: 22,
+    flexDirection: 'row', alignItems: 'center',
   },
   coinText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
 
@@ -355,6 +366,7 @@ const styles = StyleSheet.create({
   shopCoinRow: {
     backgroundColor: '#FFF3E0', borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 4, marginBottom: 12,
+    flexDirection: 'row', alignItems: 'center',
   },
   shopCoinText: { fontSize: 15, fontWeight: '700', color: GOLD },
   redeemBtn: {
@@ -366,6 +378,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5', borderRadius: 12,
     paddingHorizontal: 24, paddingVertical: 10, width: '100%', alignItems: 'center',
   },
+  lackBtnRow: { flexDirection: 'row', justifyContent: 'center' },
   lackBtnText: { color: '#aaa', fontSize: 14, fontWeight: '600' },
 
   // Records (兑换记录)
@@ -379,6 +392,7 @@ const styles = StyleSheet.create({
   recordIcon: { fontSize: 40, marginRight: 14 },
   recordInfo: { flex: 1 },
   recordName: { fontSize: 16, fontWeight: '700', color: '#1A1A2E', marginBottom: 4 },
+  recordMetaRow: { flexDirection: 'row', alignItems: 'center' },
   recordMeta: { fontSize: 13, color: '#888' },
   statusBadge: {
     borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6,
@@ -413,7 +427,8 @@ const styles = StyleSheet.create({
   },
   modalCostLabel: { fontSize: 16, color: '#888' },
   modalCostNum: { fontSize: 24, fontWeight: 'bold', color: GOLD },
-  modalBalance: { fontSize: 13, color: '#aaa', marginBottom: 8 },
+  modalBalanceRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  modalBalance: { fontSize: 13, color: '#aaa' },
   modalHint: {
     fontSize: 14, color: '#FF8C00', fontWeight: '600',
     marginBottom: 24, textAlign: 'center',
@@ -440,6 +455,7 @@ const styles = StyleSheet.create({
   successCoinRow: {
     backgroundColor: '#FFF3E0', borderRadius: 12,
     paddingHorizontal: 20, paddingVertical: 8, marginBottom: 20,
+    flexDirection: 'row', alignItems: 'center',
   },
   successCoinText: { fontSize: 16, fontWeight: '700', color: GOLD },
 });

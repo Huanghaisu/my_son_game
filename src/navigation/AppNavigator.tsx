@@ -3,8 +3,9 @@
 // ============================================================
 
 import React from 'react';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import GoldCoin from '../components/GoldCoin';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAppStore } from '../store/useAppStore';
@@ -112,7 +113,9 @@ function ChildNavigator() {
         options={{
           tabBarLabel: '金币商城',
           tabBarIcon: ({ focused }) => (
-            <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>🪙</Text>
+            <View style={{ opacity: focused ? 1 : 0.5 }}>
+              <GoldCoin size={26} />
+            </View>
           ),
         }}
       />
