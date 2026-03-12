@@ -10,7 +10,7 @@ import {
 } from '../../constants/templates';
 import { Task } from '../../store/types';
 
-type TemplateItem = Omit<Task, 'id' | 'status' | 'completedAt' | 'isEnabled'>;
+type TemplateItem = Omit<Task, 'id' | 'status' | 'completedAt' | 'isEnabled' | 'battleCardConsumed' | 'streakCount' | 'streakLastCompletedDate'>;
 
 export default function SetupTasksScreen({ navigation }: any) {
   // 默认选中推荐的4个任务

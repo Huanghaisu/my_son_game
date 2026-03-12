@@ -14,9 +14,10 @@ import {
   Animated,
 } from 'react-native';
 import { useAppStore } from '../../store/useAppStore';
-import { Task, Card } from '../../store/types';
+import { Task } from '../../store/types';
 import CardRewardModal from '../../components/CardRewardModal';
 import PINModal from '../../components/PINModal';
+import StreakMilestoneModal from '../../components/StreakMilestoneModal';
 import GoldCoin from '../../components/GoldCoin';
 import { hapticSuccess, hapticLight } from '../../utils/haptics';
 
@@ -24,40 +25,36 @@ export default function TaskHallScreen() {
   const {
     tasks,
     monsters,
-    currentMonsterIndex,
     points,
     settings,
     completeTask,
     switchToParent,
     verifyPIN,
+    pendingMilestoneReward,
+    clearPendingMilestoneReward,
   } = useAppStore();
 
-  const [rewardCard, setRewardCard] = useState<Card | null>(null);
+  const [rewardTask, setRewardTask] = useState<Task | null>(null);
   const [showRewardModal, setShowRewardModal] = useState(false);
   const [showPINModal, setShowPINModal] = useState(false);
 
   const enabledTasks = tasks.filter((t) => t.isEnabled);
   const activeMonsters = monsters.filter((m) => !m.isDefeated);
-  const currentMonster = activeMonsters[currentMonsterIndex] ?? activeMonsters[0] ?? null;
+  const currentMonster = activeMonsters[0] ?? null;
 
   const completedToday = enabledTasks.filter((t) => t.status === 'completed').length;
 
   const handleCompleteTask = (taskId: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
     hapticSuccess();
     completeTask(taskId);
 
     if (settings.taskConfirmMode === 'auto') {
-      // Zustand 状态同步更新，直接 getState() 取最新卡牌
-      const updatedCards = useAppStore.getState().cards;
-      const newCard = updatedCards
-        .filter((c) => c.taskId === taskId)
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-      if (newCard) {
-        setRewardCard(newCard);
-        setShowRewardModal(true);
-      }
+      setRewardTask(task);
+      setShowRewardModal(true);
     }
-    // parent_confirm 模式：任务状态会变为 waiting_confirm，UI 自动更新
+    // parent_confirm 模式：任务状态变为 waiting_confirm，UI 自动更新
   };
 
   const hpPercent = currentMonster
@@ -157,10 +154,10 @@ export default function TaskHallScreen() {
       {/* ── 弹窗 ───────────────────────────────────── */}
       <CardRewardModal
         visible={showRewardModal}
-        card={rewardCard}
+        task={rewardTask}
         onClose={() => {
           setShowRewardModal(false);
-          setRewardCard(null);
+          setRewardTask(null);
         }}
       />
 
@@ -172,6 +169,11 @@ export default function TaskHallScreen() {
         }}
         onCancel={() => setShowPINModal(false)}
         verifyPIN={verifyPIN}
+      />
+
+      <StreakMilestoneModal
+        achievement={pendingMilestoneReward}
+        onClose={clearPendingMilestoneReward}
       />
     </SafeAreaView>
   );
@@ -254,6 +256,24 @@ function TaskItem({ task, onComplete }: TaskItemProps) {
       {task.status === 'completed' && (
         <View style={styles.completedBadge}>
           <Text style={styles.completedText}>🎉  今日已完成！</Text>
+        </View>
+      )}
+
+      {/* 连续打卡 streak 显示 */}
+      {task.streakEnabled && (
+        <View style={styles.streakRow}>
+          <Text style={styles.streakCountText}>
+            🔥 {task.streakCount > 0 ? `已连续 ${task.streakCount} 天！` : '连续打卡中'}
+          </Text>
+          <View style={styles.milestonePips}>
+            {task.streakMilestones.map(m => (
+              <View key={m.days} style={[styles.milestonePip, m.achieved && styles.milestonePipDone]}>
+                <Text style={[styles.milestonePipText, m.achieved && { color: '#fff' }]}>
+                  {m.achieved ? '✓ ' : ''}{m.days}天
+                </Text>
+              </View>
+            ))}
+          </View>
         </View>
       )}
     </View>
@@ -535,5 +555,43 @@ const styles = StyleSheet.create({
     color: '#15803D',
     fontSize: 16,
     fontWeight: '600',
+  },
+
+  // Streak display
+  streakRow: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F3E8FF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  streakCountText: {
+    fontSize: 14,
+    color: '#7C3AED',
+    fontWeight: '700',
+  },
+  milestonePips: {
+    flexDirection: 'row',
+    gap: 5,
+  },
+  milestonePip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: '#F3E8FF',
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+  },
+  milestonePipDone: {
+    backgroundColor: '#7C3AED',
+    borderColor: '#7C3AED',
+  },
+  milestonePipText: {
+    fontSize: 11,
+    color: '#7C3AED',
+    fontWeight: '700',
   },
 });

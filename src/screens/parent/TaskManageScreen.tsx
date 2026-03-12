@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppStore } from '../../store/useAppStore';
-import { Task, TaskType } from '../../store/types';
+import { Task, TaskType, StreakMilestone } from '../../store/types';
 import { NORMAL_TASK_TEMPLATES, HARD_TASK_TEMPLATES } from '../../constants/templates';
 
 const BLUE = '#4A6FA5';
@@ -26,14 +26,20 @@ type FormState = {
   attackPower: string;
   points: string;
   timeRequirement: string;
+  streakEnabled: boolean;
+  milestone3: string;
+  milestone7: string;
+  milestone15: string;
 };
 
 const defaultForm = (): FormState => ({
   name: '', icon: '🦷', type: 'normal', attackPower: '10', points: '5', timeRequirement: '',
+  streakEnabled: false, milestone3: '', milestone7: '', milestone15: '',
 });
 
 export default function TaskManageScreen({ navigation }: any) {
   const { tasks, addTask, updateTask, deleteTask } = useAppStore();
+
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -50,6 +56,8 @@ export default function TaskManageScreen({ navigation }: any) {
 
   const openEdit = (task: Task) => {
     setEditingId(task.id);
+    const getMilestone = (days: 3 | 7 | 15) =>
+      task.streakMilestones.find(m => m.days === days)?.rewardDescription ?? '';
     setForm({
       name: task.name,
       icon: task.icon,
@@ -57,6 +65,10 @@ export default function TaskManageScreen({ navigation }: any) {
       attackPower: String(task.attackPower),
       points: String(task.points),
       timeRequirement: task.timeRequirement ?? '',
+      streakEnabled: task.streakEnabled,
+      milestone3: getMilestone(3),
+      milestone7: getMilestone(7),
+      milestone15: getMilestone(15),
     });
     setModalVisible(true);
   };
@@ -72,6 +84,16 @@ export default function TaskManageScreen({ navigation }: any) {
       Alert.alert('提示', '攻击力和积分必须是正整数');
       return;
     }
+    // Build streak milestones, preserving achieved status on edit
+    const existingTask = editingId ? tasks.find(t => t.id === editingId) : undefined;
+    const getAchieved = (days: 3 | 7 | 15) =>
+      existingTask?.streakMilestones.find(m => m.days === days)?.achieved ?? false;
+    const streakMilestones: StreakMilestone[] = [];
+    if (form.streakEnabled) {
+      if (form.milestone3.trim())  streakMilestones.push({ days: 3,  rewardDescription: form.milestone3.trim(),  achieved: getAchieved(3) });
+      if (form.milestone7.trim())  streakMilestones.push({ days: 7,  rewardDescription: form.milestone7.trim(),  achieved: getAchieved(7) });
+      if (form.milestone15.trim()) streakMilestones.push({ days: 15, rewardDescription: form.milestone15.trim(), achieved: getAchieved(15) });
+    }
     const data = {
       name: form.name.trim(),
       icon: form.icon,
@@ -80,6 +102,8 @@ export default function TaskManageScreen({ navigation }: any) {
       points: pts,
       timeRequirement: form.timeRequirement || undefined,
       isEnabled: true,
+      streakEnabled: form.streakEnabled,
+      streakMilestones,
     };
     if (editingId) {
       updateTask(editingId, data);
@@ -290,6 +314,44 @@ export default function TaskManageScreen({ navigation }: any) {
                   ))}
                 </View>
               </View>
+
+              {/* 连续打卡 */}
+              <View style={styles.section}>
+                <View style={styles.streakHeader}>
+                  <View>
+                    <Text style={styles.label}>🔥 连续打卡奖励</Text>
+                    <Text style={styles.streakSubtitle}>开启后追踪连续完成天数</Text>
+                  </View>
+                  <Switch
+                    value={form.streakEnabled}
+                    onValueChange={v => setForm(f => ({ ...f, streakEnabled: v }))}
+                    trackColor={{ false: '#ddd', true: '#7C3AED' }}
+                    thumbColor="#fff"
+                  />
+                </View>
+                {form.streakEnabled && (
+                  <View style={styles.milestoneBox}>
+                    <Text style={styles.milestoneHint}>设置里程碑奖励（可只填部分）</Text>
+                    {([
+                      { label: '🔥 连续 3 天', field: 'milestone3' as const },
+                      { label: '⭐ 连续 7 天', field: 'milestone7' as const },
+                      { label: '👑 连续 15 天', field: 'milestone15' as const },
+                    ] as const).map(m => (
+                      <View key={m.field} style={styles.milestoneRow}>
+                        <Text style={styles.milestoneLabel}>{m.label}</Text>
+                        <TextInput
+                          style={styles.milestoneInput}
+                          value={form[m.field]}
+                          onChangeText={v => setForm(f => ({ ...f, [m.field]: v }))}
+                          placeholder="奖励描述（如：看一集动画片）"
+                          placeholderTextColor="#bbb"
+                          maxLength={30}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
             </ScrollView>
 
             {/* 保存按钮 */}
@@ -327,6 +389,20 @@ function TaskSection({
                 ⚔️ {task.attackPower}  ⭐ {task.points}
                 {task.timeRequirement ? `  ⏰ ${task.timeRequirement}` : ''}
               </Text>
+              {task.streakEnabled && (
+                <View style={styles.streakBadgeRow}>
+                  <Text style={styles.streakBadge}>
+                    🔥 {task.streakCount > 0 ? `${task.streakCount}天` : '连续打卡'}
+                  </Text>
+                  {task.streakMilestones.map(m => (
+                    <View key={m.days} style={[styles.milestonePip, m.achieved && styles.milestonePipDone]}>
+                      <Text style={[styles.milestonePipText, m.achieved && { color: '#fff' }]}>
+                        {m.days}天{m.achieved ? '✓' : ''}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
             <Switch
               value={task.isEnabled}
@@ -445,4 +521,30 @@ const styles = StyleSheet.create({
     alignItems: 'center', marginTop: 8,
   },
   saveBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+
+  // Streak styles (modal)
+  streakHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  streakSubtitle: { fontSize: 11, color: '#aaa', marginTop: 2 },
+  milestoneBox: {
+    marginTop: 12, backgroundColor: '#F9F5FF', borderRadius: 12, padding: 14,
+    borderWidth: 1, borderColor: '#E9D5FF',
+  },
+  milestoneHint: { fontSize: 12, color: '#7C3AED', marginBottom: 10, fontWeight: '600' },
+  milestoneRow: { marginBottom: 10 },
+  milestoneLabel: { fontSize: 13, color: '#555', fontWeight: '600', marginBottom: 5 },
+  milestoneInput: {
+    borderWidth: 1.5, borderColor: '#E0E0E0', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 9, fontSize: 14, color: '#1A1A2E',
+    backgroundColor: '#fff',
+  },
+
+  // Streak badge (task list)
+  streakBadgeRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginTop: 4 },
+  streakBadge: { fontSize: 11, color: '#7C3AED', fontWeight: '600' },
+  milestonePip: {
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
+    backgroundColor: '#E9D5FF', borderWidth: 1, borderColor: '#C4B5FD',
+  },
+  milestonePipDone: { backgroundColor: '#7C3AED', borderColor: '#7C3AED' },
+  milestonePipText: { fontSize: 10, color: '#7C3AED', fontWeight: '700' },
 });

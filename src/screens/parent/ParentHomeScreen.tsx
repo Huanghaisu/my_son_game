@@ -15,7 +15,7 @@ const BG = '#F0F4FF';
 
 export default function ParentHomeScreen() {
   const {
-    tasks, monsters, currentMonsterIndex, cards, points,
+    tasks, monsters, points,
     settings, switchToChild, resetDailyTasks,
   } = useAppStore();
 
@@ -26,8 +26,10 @@ export default function ParentHomeScreen() {
   const progressPct = totalCount > 0 ? completedCount / totalCount : 0;
 
   const activeMonsters = monsters.filter(m => !m.isDefeated);
-  const currentMonster = activeMonsters[currentMonsterIndex] ?? activeMonsters[0] ?? null;
+  const currentMonster = activeMonsters[0] ?? null;
   const hpPct = currentMonster ? currentMonster.currentHP / currentMonster.maxHP : 0;
+  // 今日已点亮（可用于战斗）的卡牌数
+  const litCardCount = enabledTasks.filter(t => t.status === 'completed' && !t.battleCardConsumed).length;
 
   const handleResetTasks = () => {
     Alert.alert('重置今日任务', '所有任务恢复为未完成状态，确定吗？', [
@@ -117,8 +119,8 @@ export default function ParentHomeScreen() {
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statEmoji}>🃏</Text>
-            <Text style={styles.statNum}>{cards.length}</Text>
-            <Text style={styles.statLabel}>卡牌</Text>
+            <Text style={styles.statNum}>{litCardCount}</Text>
+            <Text style={styles.statLabel}>可用卡牌</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statEmoji}>👾</Text>

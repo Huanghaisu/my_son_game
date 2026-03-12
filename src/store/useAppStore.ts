@@ -5,17 +5,22 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppState, Task, Card, Monster, ShopItem, Redemption } from './types';
-import { TOOL_CARD_ICONS, SKILL_CARD_ICONS, getMonsterDifficulty, SHOP_ITEM_TEMPLATES } from '../constants/templates';
+import {
+  AppState,
+  Task,
+  Monster,
+  ShopItem,
+  Redemption,
+  DefeatedMonsterRecord,
+  MilestoneAchievement,
+} from './types';
+import { getMonsterDifficulty, SHOP_ITEM_TEMPLATES } from '../constants/templates';
 
 // 简单 ID 生成
 const genId = () => `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-// 根据任务类型随机取卡牌图标
-const getCardIcon = (type: 'tool' | 'skill') => {
-  const pool = type === 'tool' ? TOOL_CARD_ICONS : SKILL_CARD_ICONS;
-  return pool[Math.floor(Math.random() * pool.length)];
-};
+// 今日日期 YYYY-MM-DD
+const today = () => new Date().toISOString().split('T')[0];
 
 // 初始商城数据（带 ID）
 const initialShopItems: ShopItem[] = SHOP_ITEM_TEMPLATES.map((item, i) => ({
@@ -39,14 +44,14 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       // ---- 初始状态 ----------------------------------------
       tasks: [],
-      cards: [],
       monsters: [],
-      monsterQueue: [],
-      currentMonsterIndex: 0,
+      defeatedMonstersHistory: [],
       shopItems: initialShopItems,
       redemptions: [],
       points: 0,
       settings: defaultSettings,
+      lastResetDate: '',
+      pendingMilestoneReward: null,
       currentRole: 'child',
 
       // ---- 任务 Actions ------------------------------------
@@ -57,6 +62,10 @@ export const useAppStore = create<AppState>()(
           id: genId(),
           isEnabled: true,
           status: 'pending',
+          completedAt: undefined,
+          battleCardConsumed: false,
+          streakCount: taskData.streakEnabled ? (taskData as any).streakCount ?? 0 : 0,
+          streakLastCompletedDate: undefined,
         };
         set((state) => ({ tasks: [...state.tasks, task] }));
       },
@@ -77,22 +86,16 @@ export const useAppStore = create<AppState>()(
         if (!task || task.status !== 'pending') return;
 
         if (settings.taskConfirmMode === 'auto') {
-          // 自动确认：直接发卡牌
           set((state) => ({
             tasks: state.tasks.map((t) =>
-              t.id === id ? { ...t, status: 'completed', completedAt: new Date().toISOString() } : t
+              t.id === id
+                ? { ...t, status: 'completed', completedAt: new Date().toISOString() }
+                : t
             ),
           }));
-          get().addCard({
-            taskId: task.id,
-            taskName: task.name,
-            type: task.type === 'normal' ? 'tool' : 'skill',
-            attackPower: task.attackPower,
-            icon: getCardIcon(task.type === 'normal' ? 'tool' : 'skill'),
-          });
           get().addPoints(task.points);
+          get().updateStreak(id);
         } else {
-          // 家长确认模式：进入待确认状态
           set((state) => ({
             tasks: state.tasks.map((t) =>
               t.id === id ? { ...t, status: 'waiting_confirm' } : t
@@ -107,17 +110,13 @@ export const useAppStore = create<AppState>()(
 
         set((state) => ({
           tasks: state.tasks.map((t) =>
-            t.id === id ? { ...t, status: 'completed', completedAt: new Date().toISOString() } : t
+            t.id === id
+              ? { ...t, status: 'completed', completedAt: new Date().toISOString() }
+              : t
           ),
         }));
-        get().addCard({
-          taskId: task.id,
-          taskName: task.name,
-          type: task.type === 'normal' ? 'tool' : 'skill',
-          attackPower: task.attackPower,
-          icon: getCardIcon(task.type === 'normal' ? 'tool' : 'skill'),
-        });
         get().addPoints(task.points);
+        get().updateStreak(id);
       },
 
       rejectTask: (id) => {
@@ -134,28 +133,125 @@ export const useAppStore = create<AppState>()(
             ...t,
             status: 'pending',
             completedAt: undefined,
+            battleCardConsumed: false,
           })),
+          lastResetDate: today(),
         }));
       },
 
-      // ---- 卡牌 Actions ------------------------------------
-
-      addCard: (cardData) => {
-        const card: Card = {
-          ...cardData,
-          id: genId(),
-          createdAt: new Date().toISOString(),
-        };
-        set((state) => ({ cards: [...state.cards, card] }));
+      checkAndAutoReset: () => {
+        const { lastResetDate } = get();
+        if (lastResetDate !== today()) {
+          get().resetDailyTasks();
+        }
       },
 
-      removeCard: (id) => {
-        set((state) => ({ cards: state.cards.filter((c) => c.id !== id) }));
+      // ---- 连续打卡 Actions --------------------------------
+
+      updateStreak: (taskId) => {
+        const task = get().tasks.find((t) => t.id === taskId);
+        if (!task || !task.streakEnabled) return;
+
+        const todayStr = today();
+        const lastDate = task.streakLastCompletedDate;
+
+        // 今天已经计算过，跳过
+        if (lastDate === todayStr) return;
+
+        let newCount: number;
+        if (!lastDate) {
+          newCount = 1;
+        } else {
+          const diffDays = Math.round(
+            (new Date(todayStr).getTime() - new Date(lastDate).getTime()) / (1000 * 60 * 60 * 24)
+          );
+          // 1天=连续；2天=容错不断连；超过2天归零
+          newCount = diffDays <= 2 ? task.streakCount + 1 : 1;
+        }
+
+        // 找出本次新达成的最高里程碑
+        const newlyAchieved = task.streakMilestones
+          .filter(m => !m.achieved && newCount >= m.days)
+          .sort((a, b) => b.days - a.days)[0] ?? null;
+
+        const updatedMilestones = task.streakMilestones.map((m) => ({
+          ...m,
+          achieved: m.achieved || newCount >= m.days,
+        }));
+
+        const milestone: MilestoneAchievement | null = newlyAchieved
+          ? {
+              taskName: task.name,
+              taskIcon: task.icon,
+              days: newlyAchieved.days,
+              rewardDescription: newlyAchieved.rewardDescription,
+            }
+          : null;
+
+        set((state) => ({
+          tasks: state.tasks.map((t) =>
+            t.id === taskId
+              ? { ...t, streakCount: newCount, streakLastCompletedDate: todayStr, streakMilestones: updatedMilestones }
+              : t
+          ),
+          ...(milestone ? { pendingMilestoneReward: milestone } : {}),
+        }));
+      },
+
+      clearPendingMilestoneReward: () => set({ pendingMilestoneReward: null }),
+
+      // ---- 战斗 Actions ------------------------------------
+
+      attackMonster: (monsterId, taskId) => {
+        const { monsters, tasks } = get();
+        const monster = monsters.find((m) => m.id === monsterId && !m.isDefeated);
+        const task = tasks.find((t) => t.id === taskId);
+
+        if (!monster || !task) return false;
+        if (task.status !== 'completed' || task.battleCardConsumed) return false;
+
+        const newHP = Math.max(0, monster.currentHP - task.attackPower);
+        const isDefeated = newHP <= 0;
+        const defeatDate = isDefeated ? today() : undefined;
+
+        set((state) => ({
+          tasks: state.tasks.map((t) =>
+            t.id === taskId ? { ...t, battleCardConsumed: true } : t
+          ),
+          monsters: state.monsters.map((m) =>
+            m.id === monsterId
+              ? { ...m, currentHP: newHP, isDefeated, defeatDate }
+              : m
+          ),
+        }));
+
+        if (isDefeated) {
+          // 额外积分
+          get().addPoints(Math.floor(monster.maxHP * 0.1));
+
+          // 记录击败历史
+          const record: DefeatedMonsterRecord = {
+            id: genId(),
+            name: monster.name,
+            icon: monster.icon,
+            imageKey: monster.imageKey,
+            themeId: monster.themeId,
+            maxHP: monster.maxHP,
+            attack: monster.attack,
+            reward: monster.reward,
+            defeatDate: today(),
+          };
+          set((state) => ({
+            defeatedMonstersHistory: [record, ...state.defeatedMonstersHistory],
+          }));
+        }
+
+        return isDefeated;
       },
 
       // ---- 怪兽 Actions ------------------------------------
 
-      addMonsterToQueue: (monsterData) => {
+      addMonster: (monsterData) => {
         const monster: Monster = {
           ...monsterData,
           id: genId(),
@@ -176,41 +272,24 @@ export const useAppStore = create<AppState>()(
         set((state) => ({ monsters: state.monsters.filter((m) => m.id !== id) }));
       },
 
-      attackCurrentMonster: (damage, cardId) => {
-        const { monsters, currentMonsterIndex } = get();
-        const activeMonsters = monsters.filter((m) => !m.isDefeated);
-        if (activeMonsters.length === 0) return;
+      reAddMonsterFromHistory: (recordId) => {
+        const record = get().defeatedMonstersHistory.find((r) => r.id === recordId);
+        if (!record) return;
 
-        const current = activeMonsters[currentMonsterIndex] ?? activeMonsters[0];
-        if (!current) return;
-
-        const newHP = Math.max(0, current.currentHP - damage);
-        const isDefeated = newHP <= 0;
-
-        set((state) => ({
-          monsters: state.monsters.map((m) =>
-            m.id === current.id
-              ? { ...m, currentHP: newHP, isDefeated }
-              : m
-          ),
-        }));
-
-        // 消耗卡牌
-        get().removeCard(cardId);
-
-        // 击倒后加额外积分
-        if (isDefeated) {
-          get().addPoints(Math.floor(current.maxHP * 0.1));
-        }
-      },
-
-      loadNextMonster: () => {
-        const { monsters, currentMonsterIndex } = get();
-        const activeMonsters = monsters.filter((m) => !m.isDefeated);
-        if (activeMonsters.length > 0) {
-          const nextIndex = (currentMonsterIndex + 1) % monsters.filter((m) => !m.isDefeated).length;
-          set({ currentMonsterIndex: nextIndex });
-        }
+        const monster: Monster = {
+          id: genId(),
+          name: record.name,
+          icon: record.icon,
+          imageKey: record.imageKey,
+          themeId: record.themeId,
+          maxHP: record.maxHP,
+          currentHP: record.maxHP, // 满血重置
+          attack: record.attack,
+          difficulty: getMonsterDifficulty(record.maxHP),
+          reward: record.reward,
+          isDefeated: false,
+        };
+        set((state) => ({ monsters: [...state.monsters, monster] }));
       },
 
       // ---- 积分 Actions ------------------------------------
@@ -253,12 +332,10 @@ export const useAppStore = create<AppState>()(
         const success = get().spendPoints(item.costPoints);
         if (!success) return false;
 
-        // 扣库存
         if (item.stock !== undefined) {
           get().updateShopItem(itemId, { stock: item.stock - 1 });
         }
 
-        // 写兑换记录
         const redemption: Redemption = {
           id: genId(),
           itemId,
@@ -286,7 +363,6 @@ export const useAppStore = create<AppState>()(
       cancelDelivery: (redemptionId) => {
         const redemption = get().redemptions.find((r) => r.id === redemptionId);
         if (!redemption) return;
-        // 退还积分
         get().addPoints(redemption.costPoints);
         set((state) => ({
           redemptions: state.redemptions.map((r) =>

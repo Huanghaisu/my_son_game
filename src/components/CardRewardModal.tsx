@@ -13,18 +13,19 @@ import {
   Dimensions,
   Animated,
 } from 'react-native';
-import { Card } from '../store/types';
+import { Task } from '../store/types';
 import { playSound } from '../utils/soundManager';
 
 interface CardRewardModalProps {
   visible: boolean;
-  card: Card | null;
+  task: Task | null;
   onClose: () => void;
 }
 
 const { width } = Dimensions.get('window');
 
-export default function CardRewardModal({ visible, card, onClose }: CardRewardModalProps) {
+export default function CardRewardModal({ visible, task, onClose }: CardRewardModalProps) {
+  const card = task;
   const scale      = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(200)).current;
   const bgOpacity  = useRef(new Animated.Value(0)).current;
@@ -80,10 +81,10 @@ export default function CardRewardModal({ visible, card, onClose }: CardRewardMo
 
   if (!card) return null;
 
-  const isSkill     = card.type === 'skill';
+  const isSkill     = card.type === 'hard';
   const cardColor   = isSkill ? '#7C3AED' : '#2563EB';
   const cardBgColor = isSkill ? '#EDE9FE' : '#DBEAFE';
-  const typeLabel   = isSkill ? '⚡ 技能绝招卡' : '🗡️ 普通工具卡';
+  const typeLabel   = isSkill ? '⚡ 绝招卡已点亮！' : '🗡️ 战斗卡已点亮！';
 
   const iconRotate = iconSpin.interpolate({
     inputRange:  [0, 1],
@@ -120,7 +121,7 @@ export default function CardRewardModal({ visible, card, onClose }: CardRewardMo
               </Animated.View>
 
               <Text style={[styles.cardTaskName, { color: cardColor }]} numberOfLines={1}>
-                {card.taskName}
+                {card.name}
               </Text>
               <View style={[styles.attackBadge, { backgroundColor: cardColor }]}>
                 <Text style={styles.attackText}>⚔️  攻击力 +{card.attackPower}</Text>
@@ -128,7 +129,7 @@ export default function CardRewardModal({ visible, card, onClose }: CardRewardMo
             </View>
           </View>
 
-          <Text style={styles.rewardText}>🎉 获得了新卡牌！</Text>
+          <Text style={styles.rewardText}>✨ 卡牌已点亮！</Text>
 
           {/* 按钮延迟弹出 */}
           <Animated.View style={{ transform: [{ scale: btnScale }] }}>

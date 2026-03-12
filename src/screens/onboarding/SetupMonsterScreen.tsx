@@ -8,21 +8,21 @@ import { useAppStore } from '../../store/useAppStore';
 import { MONSTER_TEMPLATES } from '../../constants/templates';
 import { Monster } from '../../store/types';
 
-type MonsterTemplate = Omit<Monster, 'id' | 'isDefeated' | 'currentHP'>;
+type MonsterTemplate = Omit<Monster, 'id' | 'isDefeated' | 'currentHP' | 'defeatDate'>;
 
 export default function SetupMonsterScreen({ navigation }: any) {
   const [selected, setSelected] = useState<MonsterTemplate>(MONSTER_TEMPLATES[0]);
   const [customReward, setCustomReward] = useState('');
-  const { addMonsterToQueue } = useAppStore();
+  const { addMonster } = useAppStore();
 
   const reward = customReward.trim() || selected.reward;
 
   const handleNext = () => {
-    addMonsterToQueue({
+    addMonster({
       name: selected.name,
       icon: selected.icon,
       maxHP: selected.maxHP,
-      difficulty: selected.difficulty,
+      attack: selected.attack,
       reward,
       rewardIcon: selected.rewardIcon,
     });

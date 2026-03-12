@@ -1,6 +1,8 @@
 // ============================================================
-// 儿童端 — 战斗场（阶段 5 完整实现）
-// 动画：RN 内置 Animated + PanResponder（禁用 react-native-reanimated）
+// 儿童端 — 战斗场（重构版）
+// 卡牌来自任务状态：彩色(已完成)可攻击，灰色(未完成/已消耗)被反击
+// 普通任务→普通攻击，困难任务→绝招攻击
+// 动画：RN 内置 Animated + PanResponder
 // ============================================================
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -15,33 +17,42 @@ import {
   PanResponder,
   Dimensions,
   Easing,
+  Image,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAppStore } from '../../store/useAppStore';
-import { Card, Monster } from '../../store/types';
+import { Task, Monster } from '../../store/types';
 import MonsterDefeatedModal from '../../components/MonsterDefeatedModal';
+import SkillCutscene from '../../components/SkillCutscene';
 import { hapticMedium, hapticHeavy, hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { playSound } from '../../utils/soundManager';
 import BattleScene from '../../components/BattleScene';
-import { Image } from 'react-native';
+import { getMonsterImage } from '../../constants/monsterThemes';
 
-const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
+const { height: SCREEN_H } = Dimensions.get('window');
 
-// 卡牌视觉风格
+// 卡牌视觉风格（彩色状态）
 const CARD_STYLE = {
-  tool: { bg: '#FFF7ED', border: '#F97316', header: '#EA580C' },
-  skill: { bg: '#F5F3FF', border: '#8B5CF6', header: '#7C3AED' },
+  normal: { bg: '#FFF7ED', border: '#F97316', header: '#EA580C' },
+  hard:   { bg: '#F5F3FF', border: '#8B5CF6', header: '#7C3AED' },
 } as const;
 
+// 判断卡牌是否可用（彩色）
+function isCardAvailable(task: Task): boolean {
+  return task.status === 'completed' && !task.battleCardConsumed;
+}
+
 export default function BattleScreen() {
+  const route = useRoute<any>();
   const navigation = useNavigation<any>();
-  const { cards, monsters, currentMonsterIndex, attackCurrentMonster, loadNextMonster } =
-    useAppStore();
+  const monsterId: string = route.params?.monsterId;
+
+  const { tasks, monsters, attackMonster } = useAppStore();
 
   // ---- 派生数据 ------------------------------------------------
-  const activeMonsters = monsters.filter((m) => !m.isDefeated);
-  const currentMonster = activeMonsters[currentMonsterIndex] ?? activeMonsters[0] ?? null;
-  const displayCards = cards.slice(0, 10);
+  const monster = monsters.find((m) => m.id === monsterId && !m.isDefeated) ?? null;
+  // 战斗卡牌 = 今日启用的任务，最多 10 张
+  const battleCards = tasks.filter((t) => t.isEnabled).slice(0, 10);
 
   // ---- 局部状态 ------------------------------------------------
   const [currentCardIdx, setCurrentCardIdx] = useState(0);
@@ -50,6 +61,9 @@ export default function BattleScreen() {
   const [showDefeatedModal, setShowDefeatedModal] = useState(false);
   const [defeatedMonster, setDefeatedMonster] = useState<Monster | null>(null);
   const [counterVisible, setCounterVisible] = useState(false);
+  const [showSkillCutscene, setShowSkillCutscene] = useState(false);
+  // 绝招命中数据，cutscene 结束后取用
+  const skillHitRef = useRef<{ defeated: boolean; newHpPct: number; mon: Monster } | null>(null);
 
   // ---- Animated 值 --------------------------------------------
   const cardTX = useRef(new Animated.Value(0)).current;
@@ -59,28 +73,24 @@ export default function BattleScreen() {
 
   const monsterTX = useRef(new Animated.Value(0)).current;
   const monsterScale = useRef(new Animated.Value(1)).current;
-  const idleAnimScale = useRef(new Animated.Value(1)).current; // 呼吸缩放
-  const idleAnimY = useRef(new Animated.Value(0)).current; // 呼吸浮动
+  const idleAnimScale = useRef(new Animated.Value(1)).current;
+  const idleAnimY = useRef(new Animated.Value(0)).current;
 
   const damageY = useRef(new Animated.Value(0)).current;
   const damageOpacity = useRef(new Animated.Value(0)).current;
 
-  const swipeUpAnim = useRef(new Animated.Value(1)).current; // 指引箭头
-  const swayAnim = useRef(new Animated.Value(0)).current; // 卡牌摇摆
+  const swipeUpAnim = useRef(new Animated.Value(1)).current;
+  const swayAnim = useRef(new Animated.Value(0)).current;
 
-  // 两层闪光：黄色（攻击）/ 红色（反击）
   const attackFlash = useRef(new Animated.Value(0)).current;
   const counterFlash = useRef(new Animated.Value(0)).current;
 
   const hpBarAnim = useRef(
-    new Animated.Value(
-      currentMonster ? currentMonster.currentHP / currentMonster.maxHP : 1
-    )
+    new Animated.Value(monster ? monster.currentHP / monster.maxHP : 1)
   ).current;
 
   // ---- 呼吸动画与指引箭头 -------------------------------------
   useEffect(() => {
-    // 怪兽呼吸循环
     const idleLoop = Animated.loop(
       Animated.parallel([
         Animated.sequence([
@@ -90,13 +100,12 @@ export default function BattleScreen() {
         Animated.sequence([
           Animated.timing(idleAnimY, { toValue: -8, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
           Animated.timing(idleAnimY, { toValue: 0, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        ])
+        ]),
       ])
     );
-    if (!isAnimating && currentMonster) idleLoop.start();
+    if (!isAnimating && monster) idleLoop.start();
     else { idleAnimScale.setValue(1); idleAnimY.setValue(0); }
 
-    // 箭头脉冲循环
     Animated.loop(
       Animated.sequence([
         Animated.timing(swipeUpAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
@@ -104,7 +113,6 @@ export default function BattleScreen() {
       ])
     ).start();
 
-    // 卡牌微摇摆循环
     Animated.loop(
       Animated.sequence([
         Animated.timing(swayAnim, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -113,23 +121,27 @@ export default function BattleScreen() {
     ).start();
 
     return () => idleLoop.stop();
-  }, [isAnimating, currentMonster?.id]);
+  }, [isAnimating, monster?.id]);
 
-  // ---- 怪兽切换时同步 HP 条 -----------------------------------
+  // ---- 怪兽 HP 条同步 -----------------------------------------
   useEffect(() => {
-    if (currentMonster) {
-      hpBarAnim.setValue(currentMonster.currentHP / currentMonster.maxHP);
+    if (monster) {
+      Animated.timing(hpBarAnim, {
+        toValue: monster.currentHP / monster.maxHP,
+        duration: 420,
+        useNativeDriver: false,
+      }).start();
     }
-  }, [currentMonster?.id]);
+  }, [monster?.currentHP]);
 
-  // ---- 卡牌移除后修正索引 -------------------------------------
+  // ---- 卡牌索引边界保护 ---------------------------------------
   useEffect(() => {
-    if (displayCards.length > 0 && currentCardIdx >= displayCards.length) {
-      setCurrentCardIdx(displayCards.length - 1);
+    if (battleCards.length > 0 && currentCardIdx >= battleCards.length) {
+      setCurrentCardIdx(battleCards.length - 1);
     }
-  }, [displayCards.length]);
+  }, [battleCards.length]);
 
-  // ---- 辅助：重置卡牌动画 -------------------------------------
+  // ---- 辅助函数 -----------------------------------------------
   const resetCardAnim = () => {
     cardTX.setValue(0);
     cardTY.setValue(0);
@@ -137,7 +149,6 @@ export default function BattleScreen() {
     cardScale.setValue(1);
   };
 
-  // ---- 怪兽抖动序列 -------------------------------------------
   const shakeMonster = (strong: boolean) =>
     Animated.sequence([
       Animated.timing(monsterTX, { toValue: strong ? -28 : -11, duration: 55, useNativeDriver: true }),
@@ -147,16 +158,11 @@ export default function BattleScreen() {
       Animated.timing(monsterTX, { toValue: 0, duration: 55, useNativeDriver: true }),
     ]);
 
-  // ---- 伤害数字飘出 -------------------------------------------
   const showDamageNumber = (isSkill: boolean) => {
     damageY.setValue(0);
     damageOpacity.setValue(1);
     Animated.parallel([
-      Animated.timing(damageY, {
-        toValue: isSkill ? -115 : -75,
-        duration: 900,
-        useNativeDriver: true,
-      }),
+      Animated.timing(damageY, { toValue: isSkill ? -115 : -75, duration: 900, useNativeDriver: true }),
       Animated.sequence([
         Animated.delay(isSkill ? 520 : 360),
         Animated.timing(damageOpacity, { toValue: 0, duration: 380, useNativeDriver: true }),
@@ -165,65 +171,40 @@ export default function BattleScreen() {
   };
 
   // ---- 执行攻击 -----------------------------------------------
-  const performAttack = (card: Card, monster: Monster) => {
+  const performAttack = (task: Task, mon: Monster) => {
+    if (!isCardAvailable(task)) return;
     setIsAnimating(true);
-    setDamageValue(card.attackPower);
+    setDamageValue(task.attackPower);
 
-    const newHP = Math.max(0, monster.currentHP - card.attackPower);
-    const newPct = newHP / monster.maxHP;
-    const isSkill = card.type === 'skill';
+    const newHP = Math.max(0, mon.currentHP - task.attackPower);
+    const newPct = newHP / mon.maxHP;
+    const isSkill = task.type === 'hard'; // 困难任务 = 绝招攻击
 
-    // 卡牌飞出后的统一回调：提交 store + 播放命中动效
     const afterFlyOut = () => {
-      // 触觉 + 音效：普通卡中等冲击，技能卡重击
-      if (isSkill) hapticHeavy(); else hapticMedium();
-      playSound('monster_hit');
-
-      // 提交伤害（store 内自动移除卡牌，HP 归零时标记 isDefeated）
-      attackCurrentMonster(card.attackPower, card.id);
-
-      // HP 条动画
-      Animated.timing(hpBarAnim, {
-        toValue: newPct,
-        duration: 420,
-        useNativeDriver: false,
-      }).start();
-
-      // 伤害数字
-      showDamageNumber(isSkill);
+      // 提交到 store（绝招/普通都先算好结果）
+      const defeated = attackMonster(mon.id, task.id);
 
       if (isSkill) {
-        // 技能：冲击闪光 + 怪兽缩放 + 剧烈抖动
-        Animated.sequence([
-          Animated.timing(attackFlash, { toValue: 0.75, duration: 80, useNativeDriver: true }),
-          Animated.timing(attackFlash, { toValue: 0, duration: 260, useNativeDriver: true }),
-        ]).start();
-        Animated.sequence([
-          Animated.timing(monsterScale, { toValue: 1.22, duration: 110, useNativeDriver: true }),
-          shakeMonster(true),
-          Animated.timing(monsterScale, { toValue: 1, duration: 160, useNativeDriver: true }),
-        ]).start();
+        // 绝招：把命中数据存起来，等 cutscene 播完再呈现
+        skillHitRef.current = { defeated, newHpPct: newPct, mon };
+        resetCardAnim();
+        setShowSkillCutscene(true);
       } else {
+        // 普通攻击：立即呈现命中效果
+        hapticMedium();
+        playSound('attack');
+        Animated.timing(hpBarAnim, { toValue: newPct, duration: 420, useNativeDriver: false }).start();
+        showDamageNumber(false);
         shakeMonster(false).start();
+        setTimeout(() => {
+          if (defeated) { doMonsterDefeat(mon); }
+          else { resetCardAnim(); setIsAnimating(false); }
+        }, 820);
       }
-
-      // 动画播放完后决定下一步
-      setTimeout(() => {
-        if (newHP <= 0) {
-          doMonsterDefeat(monster);
-        } else {
-          const freshCards = useAppStore.getState().cards.slice(0, 10);
-          setCurrentCardIdx((prev) =>
-            freshCards.length > 0 ? Math.min(prev, freshCards.length - 1) : 0
-          );
-          resetCardAnim();
-          setIsAnimating(false);
-        }
-      }, isSkill ? 1050 : 820);
     };
 
     if (isSkill) {
-      // 技能绝招：预闪光 → 卡牌缩放飞出 → 命中
+      // 绝招：预闪光 → 卡牌缩放飞出 → 命中
       Animated.sequence([
         Animated.timing(attackFlash, { toValue: 0.62, duration: 140, useNativeDriver: true }),
         Animated.timing(attackFlash, { toValue: 0, duration: 140, useNativeDriver: true }),
@@ -234,7 +215,6 @@ export default function BattleScreen() {
         ]),
       ]).start(afterFlyOut);
     } else {
-      // 普通工具卡：简单飞出
       Animated.parallel([
         Animated.timing(cardTY, { toValue: -SCREEN_H * 0.48, duration: 330, useNativeDriver: true }),
         Animated.timing(cardOpacity, { toValue: 0, duration: 310, useNativeDriver: true }),
@@ -242,8 +222,34 @@ export default function BattleScreen() {
     }
   };
 
+  // ---- 绝招 cutscene 结束：呈现命中效果 ----------------------
+  const handleSkillCutsceneComplete = () => {
+    setShowSkillCutscene(false);
+    const data = skillHitRef.current;
+    if (!data) return;
+    skillHitRef.current = null;
+
+    hapticHeavy();
+    playSound('attack');
+    Animated.timing(hpBarAnim, { toValue: data.newHpPct, duration: 420, useNativeDriver: false }).start();
+    showDamageNumber(true);
+    Animated.sequence([
+      Animated.timing(attackFlash, { toValue: 0.75, duration: 80,  useNativeDriver: true }),
+      Animated.timing(attackFlash, { toValue: 0,    duration: 260, useNativeDriver: true }),
+    ]).start();
+    Animated.sequence([
+      Animated.timing(monsterScale, { toValue: 1.22, duration: 110, useNativeDriver: true }),
+      shakeMonster(true),
+      Animated.timing(monsterScale, { toValue: 1,    duration: 160, useNativeDriver: true }),
+    ]).start();
+    setTimeout(() => {
+      if (data.defeated) { doMonsterDefeat(data.mon); }
+      else { setIsAnimating(false); }
+    }, 1050);
+  };
+
   // ---- 怪兽击倒动画 -------------------------------------------
-  const doMonsterDefeat = (monster: Monster) => {
+  const doMonsterDefeat = (mon: Monster) => {
     hapticSuccess();
     playSound('monster_defeated');
     Animated.sequence([
@@ -255,16 +261,17 @@ export default function BattleScreen() {
     ]).start(() => {
       monsterScale.setValue(1);
       monsterTX.setValue(0);
-      setDefeatedMonster({ ...monster });
+      setDefeatedMonster({ ...mon });
       setShowDefeatedModal(true);
       resetCardAnim();
       setIsAnimating(false);
     });
   };
 
-  // ---- 怪兽反击动画（仅视觉，不扣血）--------------------------
+  // ---- 怪兽反击（仅视觉）-------------------------------------
   const playCounterAttack = () => {
     hapticWarning();
+    playSound('monster_roar');
     setCounterVisible(true);
     Animated.sequence([
       Animated.timing(monsterTX, { toValue: -58, duration: 130, useNativeDriver: true }),
@@ -278,27 +285,30 @@ export default function BattleScreen() {
     ]).start();
   };
 
-  // ---- Callback refs（避免 PanResponder 捕获旧闭包）----------
+  // ---- Callback refs（避免 stale closure）--------------------
   const isAnimatingRef = useRef(false);
   isAnimatingRef.current = isAnimating;
 
-  // 每次渲染刷新回调 ref，保证使用最新 state
   const gestureRef = useRef({
-    onSwipeUp: () => { },
-    onSwipeSide: (_dx: number) => { },
+    onSwipeUp: () => {},
+    onSwipeSide: (_dx: number) => {},
   });
 
   gestureRef.current = {
     onSwipeUp: () => {
       if (isAnimatingRef.current) return;
       const state = useAppStore.getState();
-      const freshCards = state.cards.slice(0, 10);
-      const card = freshCards[currentCardIdx] ?? freshCards[0];
-      const actives = state.monsters.filter((m) => !m.isDefeated);
-      const monster = actives[state.currentMonsterIndex] ?? actives[0];
-      if (!card || !monster) return;
-      playSound('attack');
-      performAttack(card, monster);
+      const freshCards = state.tasks.filter((t) => t.isEnabled).slice(0, 10);
+      const task = freshCards[currentCardIdx] ?? freshCards[0];
+      const mon = state.monsters.find((m) => m.id === monsterId && !m.isDefeated);
+      if (!task || !mon) return;
+
+      if (!isCardAvailable(task)) {
+        // 灰色卡牌：上划无效，提示怪兽嘲讽
+        playCounterAttack();
+        return;
+      }
+      performAttack(task, mon);
     },
     onSwipeSide: (dx: number) => {
       if (isAnimatingRef.current) return;
@@ -307,18 +317,21 @@ export default function BattleScreen() {
         Animated.timing(cardOpacity, { toValue: 0, duration: 210, useNativeDriver: true }),
       ]).start(() => {
         resetCardAnim();
-        const freshLen = useAppStore.getState().cards.slice(0, 10).length;
-        if (freshLen > 0) {
-          setCurrentCardIdx((prev) => (prev + 1) % freshLen);
+        const freshCards = useAppStore.getState().tasks.filter((t) => t.isEnabled).slice(0, 10);
+        if (freshCards.length > 0) {
+          const nextIdx = (currentCardIdx + 1) % freshCards.length;
+          setCurrentCardIdx(nextIdx);
+          const nextCard = freshCards[nextIdx];
+          // 翻到灰色卡牌 → 怪兽反击
+          if (!nextCard || !isCardAvailable(nextCard)) {
+            playCounterAttack();
+          }
         }
-        // 划走卡牌 → 怪兽反击！
-        playSound('monster_roar');
-        playCounterAttack();
       });
     },
   };
 
-  // ---- PanResponder（只创建一次）------------------------------
+  // ---- PanResponder（只创建一次）-----------------------------
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => !isAnimatingRef.current,
@@ -331,13 +344,10 @@ export default function BattleScreen() {
       onPanResponderRelease: (_, gs) => {
         const { dx, dy } = gs;
         if (dy < -60 && Math.abs(dx) < 70) {
-          // 上滑：攻击
           gestureRef.current.onSwipeUp();
         } else if (Math.abs(dx) > 70 && dy > -50) {
-          // 左右滑：切换 + 怪兽反击
           gestureRef.current.onSwipeSide(dx);
         } else {
-          // 弹回
           Animated.parallel([
             Animated.spring(cardTX, { toValue: 0, useNativeDriver: true }),
             Animated.spring(cardTY, { toValue: 0, useNativeDriver: true }),
@@ -347,37 +357,36 @@ export default function BattleScreen() {
     })
   ).current;
 
-  // ---- 关闭击倒弹窗 -------------------------------------------
+  // ---- 关闭击倒弹窗，返回怪兽选择 ----------------------------
   const handleCloseDefeated = () => {
     setShowDefeatedModal(false);
     setDefeatedMonster(null);
-    loadNextMonster();
-    // 同步新怪兽 HP 条（Zustand 同步更新，直接读取）
-    const state = useAppStore.getState();
-    const actives = state.monsters.filter((m) => !m.isDefeated);
-    const next = actives[state.currentMonsterIndex] ?? actives[0];
-    if (next) hpBarAnim.setValue(next.currentHP / next.maxHP);
+    navigation.goBack(); // 返回 MonsterSelectScreen
   };
 
   // ---- 渲染 ---------------------------------------------------
-  const currentCard = displayCards[currentCardIdx] ?? displayCards[0] ?? null;
-  const backCount = Math.min(3, displayCards.length - 1);
-  const hpPct = currentMonster ? currentMonster.currentHP / currentMonster.maxHP : 0;
+  const currentCard = battleCards[currentCardIdx] ?? battleCards[0] ?? null;
+  const backCount = Math.min(3, battleCards.length - 1);
+  const hpPct = monster ? monster.currentHP / monster.maxHP : 0;
   const hpBarColor = hpPct > 0.5 ? '#22C55E' : hpPct > 0.25 ? '#F59E0B' : '#EF4444';
+  const monsterImage = monster ? getMonsterImage(monster.themeId, monster.imageKey) : null;
+
+  const available = currentCard ? isCardAvailable(currentCard) : false;
+  const style = currentCard ? CARD_STYLE[currentCard.type] : CARD_STYLE.normal;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#DC2626" />
 
-      {/* ---- 怪兽区 (全屏背景 + 绝对定位覆盖 UI) ---- */}
+      {/* ---- 全屏怪兽场景背景 ---- */}
       <View style={styles.monsterSectionContainer}>
         <BattleScene>
           <View style={styles.monsterContentArea}>
-            {currentMonster ? (
+            {monster ? (
               <>
-                {/* 移至上方的胶囊血条区 */}
+                {/* 胶囊血条区 */}
                 <View style={styles.monsterHeaderBlock}>
-                  <Text style={styles.monsterName}>{currentMonster.name}</Text>
+                  <Text style={styles.monsterName}>{monster.name}</Text>
                   <View style={styles.hpBarOuter}>
                     <Animated.View
                       style={[
@@ -393,25 +402,27 @@ export default function BattleScreen() {
                     />
                   </View>
                   <Text style={styles.hpText}>
-                    HP: {currentMonster.currentHP} / {currentMonster.maxHP}
+                    HP {monster.currentHP} / {monster.maxHP}
                   </Text>
                 </View>
 
-                {/* 巨型怪兽容器 */}
+                {/* 怪兽形象 */}
                 <View style={styles.monsterEmojiWrapper}>
                   <Animated.View
                     style={{
                       transform: [
                         { translateX: monsterTX },
                         { scale: Animated.multiply(monsterScale, idleAnimScale) },
-                        { translateY: idleAnimY }
-                      ]
+                        { translateY: idleAnimY },
+                      ],
                     }}
                   >
-                    {currentMonster.imageUri ? (
-                      <Image source={{ uri: currentMonster.imageUri }} style={styles.monsterImage} />
+                    {monsterImage ? (
+                      <Image source={monsterImage} style={styles.monsterImage} />
+                    ) : monster.imageUri ? (
+                      <Image source={{ uri: monster.imageUri }} style={styles.monsterImage} />
                     ) : (
-                      <Text style={styles.monsterEmoji}>{currentMonster.icon}</Text>
+                      <Text style={styles.monsterEmoji}>{monster.icon}</Text>
                     )}
                   </Animated.View>
 
@@ -426,7 +437,7 @@ export default function BattleScreen() {
                     <Text
                       style={[
                         styles.damageText,
-                        currentCard?.type === 'skill' && styles.damageTextSkill,
+                        currentCard?.type === 'hard' && styles.damageTextSkill,
                       ]}
                     >
                       -{damageValue}
@@ -444,48 +455,44 @@ export default function BattleScreen() {
             ) : (
               <View style={styles.allDefeated}>
                 <Text style={styles.allDefeatedIcon}>🏆</Text>
-                <Text style={styles.allDefeatedText}>怪兽全军覆没</Text>
+                <Text style={styles.allDefeatedText}>怪兽已被击倒</Text>
               </View>
             )}
           </View>
         </BattleScene>
       </View>
 
-      {/* 底部功能区 (叠加在背景之上) */}
+      {/* ---- 底部卡牌区（叠加在背景上）---- */}
       <View style={styles.bottomOverlay}>
-        {/* ---- 顶栏状态区 (移至上方覆盖) ---- */}
+        {/* 顶栏 */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>⚔️ 战斗场</Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Text style={styles.backBtnText}>‹ 换怪兽</Text>
+          </TouchableOpacity>
           <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>🃏 {displayCards.length} 张</Text>
-            {currentMonster && (
+            <Text style={styles.headerBadgeText}>
+              🃏 {battleCards.filter(isCardAvailable).length}/{battleCards.length}
+            </Text>
+            {monster && (
               <Text style={styles.rewardHintSmall}>
-                奖励: {currentMonster.rewardIcon ?? '🎁'}
+                奖励: {monster.rewardIcon ?? '🎁'}
               </Text>
             )}
           </View>
         </View>
 
-        {/* ---- 卡牌区 ---- */}
+        {/* 卡牌区 */}
         <View style={styles.cardSection}>
-          {displayCards.length === 0 ? (
-            // 空卡牌状态
+          {battleCards.length === 0 ? (
             <View style={styles.emptyCards}>
-              <Text style={styles.emptyIcon}>🎒</Text>
-              <Text style={styles.emptyText}>还没有卡牌！</Text>
-              <Text style={styles.emptyHint}>先去完成任务获得攻击卡牌吧</Text>
-              <TouchableOpacity
-                style={styles.goTasksBtn}
-                onPress={() => navigation.navigate('TaskHall')}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.goTasksBtnText}>去完成任务 →</Text>
-              </TouchableOpacity>
+              <Text style={styles.emptyIcon}>📋</Text>
+              <Text style={styles.emptyText}>还没有配置任务！</Text>
+              <Text style={styles.emptyHint}>请让爸爸妈妈添加任务</Text>
             </View>
           ) : (
             <>
               <View style={styles.cardStackArea}>
-                {/* 背景堆叠卡（仅视觉深度） */}
+                {/* 背景堆叠卡 */}
                 {Array.from({ length: backCount }).map((_, i) => (
                   <View
                     key={i}
@@ -503,95 +510,84 @@ export default function BattleScreen() {
                 ))}
 
                 {/* 当前卡牌（可交互） */}
-                {currentCard && (() => {
-                  const isEpic = currentCard.attackPower >= 10;
-                  const isRare = currentCard.attackPower >= 6 && currentCard.attackPower < 10;
-                  const style = CARD_STYLE[currentCard.type];
-
-                  return (
-                    <Animated.View
-                      {...panResponder.panHandlers}
+                {currentCard && (
+                  <Animated.View
+                    {...panResponder.panHandlers}
+                    style={[
+                      styles.card,
+                      {
+                        backgroundColor: available ? style.bg : '#E5E7EB',
+                        borderColor: available ? style.border : '#9CA3AF',
+                        borderWidth: 2,
+                        zIndex: 10,
+                        opacity: available ? cardOpacity : Animated.multiply(cardOpacity, 0.7 as any),
+                        transform: [
+                          { translateX: cardTX },
+                          { translateY: cardTY },
+                          { scale: cardScale },
+                          {
+                            rotate: swayAnim.interpolate({
+                              inputRange: [-1, 1],
+                              outputRange: ['-1.5deg', '1.5deg'],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  >
+                    {/* 卡牌头部 */}
+                    <View
                       style={[
-                        styles.card,
-                        {
-                          backgroundColor: style.bg,
-                          borderColor: isEpic ? '#FFD700' : isRare ? '#A855F7' : style.border,
-                          borderWidth: (isEpic || isRare) ? 3 : 2,
-                          zIndex: 10,
-                          transform: [
-                            { translateX: cardTX },
-                            { translateY: cardTY },
-                            { scale: cardScale },
-                            {
-                              rotate: swayAnim.interpolate({
-                                inputRange: [-1, 1],
-                                outputRange: ['-1.5deg', '1.5deg']
-                              })
-                            }
-                          ],
-                          opacity: cardOpacity,
-                          shadowColor: isEpic ? '#FFD700' : isRare ? '#A855F7' : '#000',
-                          shadowRadius: isEpic ? 15 : isRare ? 8 : 10,
-                          shadowOpacity: (isEpic || isRare) ? 0.6 : 0.2,
-                        },
+                        styles.cardHeader,
+                        { backgroundColor: available ? style.header : '#6B7280' },
                       ]}
                     >
-                      {/* 内发光边缘纹理 */}
-                      <View style={styles.cardInnerHighlight} />
+                      <Text style={styles.cardHeaderTitle}>
+                        {available
+                          ? currentCard.type === 'hard' ? '⚡ 绝招攻击' : '🗡️ 普通攻击'
+                          : currentCard.type === 'hard' ? '🔒 困难任务' : '🔒 普通任务'
+                        }
+                      </Text>
+                      <Text style={styles.cardIndexText}>
+                        {currentCardIdx + 1}/{battleCards.length}
+                      </Text>
+                    </View>
 
-                      {/* 卡牌标题带 (三段式之首) */}
-                      <View style={[styles.cardHeader, { backgroundColor: style.header }]}>
-                        <Text style={styles.cardHeaderTitle}>
-                          {currentCard.type === 'skill' ? '✨ 技能绝招' : '🔧 工具卡'}
-                        </Text>
-                        <View style={styles.rarityBadge}>
-                          <Text style={styles.rarityBadgeText}>
-                            {isEpic ? '💎' : isRare ? '✨' : '⭐'}
+                    {/* 卡牌主体 */}
+                    <View style={styles.cardBody}>
+                      <Text style={[styles.cardIconLarge, !available && styles.cardIconGray]}>
+                        {currentCard.icon}
+                      </Text>
+                      {available && (
+                        <View style={[styles.powerTag, { backgroundColor: style.header }]}>
+                          <Text style={styles.powerTagText}>
+                            攻击 {currentCard.attackPower}
                           </Text>
                         </View>
-                      </View>
-
-                      {/* 中间图标区 (三段式之中) */}
-                      <View style={styles.cardBody}>
-                        <View style={styles.iconPlatform} />
-                        <Text style={styles.cardIconLarge}>{currentCard.icon}</Text>
-
-                        {/* 攻击力挂件 */}
-                        <View style={[styles.powerTag, { backgroundColor: style.header }]}>
-                          <Text style={styles.powerTagText}>攻击 {currentCard.attackPower}</Text>
-                        </View>
-                      </View>
-
-                      {/* 底部描述区 (三段式之尾) */}
-                      <View style={styles.cardFooter}>
-                        <Text style={styles.footerTaskName} numberOfLines={1}>
-                          {currentCard.taskName}
-                        </Text>
-                        <View style={styles.footerDivider} />
-                        <Text style={styles.footerHint}>上划发动强力一击！</Text>
-                      </View>
-
-                      {/* 史诗级金光特效 */}
-                      {isEpic && (
-                        <Animated.View
-                          style={[
-                            styles.epicGlow,
-                            {
-                              opacity: swayAnim.interpolate({
-                                inputRange: [-1, 0, 1],
-                                outputRange: [0.3, 0.6, 0.3]
-                              })
-                            }
-                          ]}
-                        />
                       )}
-                    </Animated.View>
-                  );
-                })()}
+                    </View>
+
+                    {/* 卡牌底部 */}
+                    <View style={styles.cardFooter}>
+                      <Text style={styles.footerTaskName} numberOfLines={1}>
+                        {currentCard.name}
+                      </Text>
+                      <View style={styles.footerDivider} />
+                      <Text style={styles.footerHint}>
+                        {available ? '↑ 上划发动攻击！' : '⏳ 完成任务后点亮'}
+                      </Text>
+                    </View>
+
+                    {/* 灰色遮罩 */}
+                    {!available && <View style={styles.grayMask} />}
+                  </Animated.View>
+                )}
               </View>
 
               <Animated.View style={[styles.swipeHintRow, { opacity: swipeUpAnim }]}>
-                <Text style={styles.swipeHintUp}>↑ 向上滑动发动攻击 ↑</Text>
+                <Text style={styles.swipeHintUp}>
+                  {available ? '↑ 向上滑动发动攻击 ↑' : '← 左右滑动换卡 →'}
+                </Text>
               </Animated.View>
             </>
           )}
@@ -614,6 +610,11 @@ export default function BattleScreen() {
         monster={defeatedMonster}
         onClose={handleCloseDefeated}
       />
+
+      {/* ---- 必杀技演出（困难任务专属） ---- */}
+      {showSkillCutscene && (
+        <SkillCutscene onComplete={handleSkillCutsceneComplete} />
+      )}
     </SafeAreaView>
   );
 }
@@ -626,53 +627,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFF0F0',
   },
-
-  // ---- 顶栏 ----
-  header: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#fff',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  headerBadge: {
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
-    alignItems: 'flex-end',
-  },
-  headerBadgeText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  rewardHintSmall: {
-    color: '#FFD700',
-    fontSize: 11,
-    marginTop: 2,
-    fontWeight: '700',
-  },
-
-  // ---- 怪兽区 (场景模式) ----
   monsterSectionContainer: {
     ...StyleSheet.absoluteFillObject,
   },
   monsterContentArea: {
     flex: 1,
     alignItems: 'center',
-    paddingTop: '20%', // 避开顶栏
+    paddingTop: '20%',
   },
 
-  // 胶囊血条
   monsterHeaderBlock: {
     alignItems: 'center',
     marginBottom: 20,
@@ -710,7 +673,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
-  // 巨型怪兽显示
   monsterEmojiWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -724,16 +686,12 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     resizeMode: 'contain',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
   },
 
   damageOverlay: {
     position: 'absolute',
     top: -20,
     alignSelf: 'center',
-    pointerEvents: 'none',
     zIndex: 20,
   } as any,
   damageText: {
@@ -778,16 +736,51 @@ const styles = StyleSheet.create({
     color: '#DC2626',
   },
 
-  // ---- 底部覆盖区 ----
+  // 底部覆盖区
   bottomOverlay: {
     position: 'absolute',
     bottom: 0,
     width: '100%',
-    height: '42%',
+    height: '44%',
     justifyContent: 'flex-end',
   },
+  header: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backBtn: {
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  backBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  headerBadge: {
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    alignItems: 'flex-end',
+  },
+  headerBadgeText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  rewardHintSmall: {
+    color: '#FFD700',
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: '700',
+  },
 
-  // ---- 卡牌区 ----
   cardSection: {
     flex: 1,
     alignItems: 'center',
@@ -819,17 +812,6 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
   },
 
-  // 卡牌内发光细节
-  cardInnerHighlight: {
-    ...StyleSheet.absoluteFillObject,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.4)',
-    borderRadius: 20,
-    zIndex: 5,
-    pointerEvents: 'none',
-  },
-
-  // 三段式：头部
   cardHeader: {
     height: 34,
     width: '100%',
@@ -842,40 +824,25 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     fontWeight: '900',
-    textShadowColor: 'rgba(0,0,0,0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
   },
-  rarityBadge: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 10,
-    width: 22,
-    height: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  rarityBadgeText: {
-    fontSize: 12,
+  cardIndexText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 11,
+    fontWeight: '600',
   },
 
-  // 三段式：主体
   cardBody: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
   },
-  iconPlatform: {
-    position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    bottom: '20%',
-  },
   cardIconLarge: {
-    fontSize: 74,
+    fontSize: 64,
     zIndex: 2,
+  },
+  cardIconGray: {
+    opacity: 0.4,
   },
   powerTag: {
     position: 'absolute',
@@ -884,10 +851,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 2,
   },
   powerTagText: {
     color: '#fff',
@@ -895,7 +858,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
 
-  // 三段式：底部
   cardFooter: {
     height: 54,
     backgroundColor: 'rgba(255,255,255,0.7)',
@@ -924,13 +886,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // 史诗级光效应
-  epicGlow: {
+  // 灰色遮罩
+  grayMask: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#FFD700',
-    opacity: 0.1,
-    zIndex: -1,
+    backgroundColor: 'rgba(100,100,100,0.25)',
+    zIndex: 5,
   },
+
   swipeHintRow: {
     marginTop: 18,
     backgroundColor: 'rgba(0,0,0,0.6)',
@@ -945,7 +907,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
-  // ---- 空卡牌 ----
   emptyCards: {
     alignItems: 'center',
     gap: 10,
@@ -964,20 +925,7 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
   },
-  goTasksBtn: {
-    marginTop: 8,
-    backgroundColor: '#DC2626',
-    paddingHorizontal: 28,
-    paddingVertical: 13,
-    borderRadius: 28,
-  },
-  goTasksBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
 
-  // ---- 闪光层 ----
   flashOverlay: {
     ...StyleSheet.absoluteFillObject,
   },
