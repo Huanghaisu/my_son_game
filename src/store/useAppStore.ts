@@ -64,7 +64,7 @@ export const useAppStore = create<AppState>()(
           status: 'pending',
           completedAt: undefined,
           battleCardConsumed: false,
-          streakCount: taskData.streakEnabled ? (taskData as any).streakCount ?? 0 : 0,
+          streakCount: 0,
           streakLastCompletedDate: undefined,
         };
         set((state) => ({ tasks: [...state.tasks, task] }));
@@ -235,6 +235,7 @@ export const useAppStore = create<AppState>()(
             name: monster.name,
             icon: monster.icon,
             imageKey: monster.imageKey,
+            imageUri: monster.imageUri,
             themeId: monster.themeId,
             maxHP: monster.maxHP,
             attack: monster.attack,
@@ -281,6 +282,7 @@ export const useAppStore = create<AppState>()(
           name: record.name,
           icon: record.icon,
           imageKey: record.imageKey,
+          imageUri: record.imageUri,
           themeId: record.themeId,
           maxHP: record.maxHP,
           currentHP: record.maxHP, // 满血重置

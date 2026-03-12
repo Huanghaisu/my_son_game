@@ -18,6 +18,8 @@ import {
 import { useAppStore } from '../../store/useAppStore';
 import { Monster } from '../../store/types';
 import { getMonsterImage } from '../../constants/monsterThemes';
+import { Colors, Radius, Shadow, FontSize } from '../../constants/theme';
+import { hapticMedium, hapticHeavy } from '../../utils/haptics';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
@@ -28,8 +30,10 @@ interface Props {
 
 export default function MonsterSelectScreen({ navigation }: Props) {
   const monsters = useAppStore((s) => s.monsters);
+  const childName = useAppStore((s) => s.settings.childName);
   const activeMonsters = monsters.filter((m) => !m.isDefeated);
   const titleAnim = useRef(new Animated.Value(0)).current;
+  const bgRotate  = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.spring(titleAnim, {
@@ -38,6 +42,18 @@ export default function MonsterSelectScreen({ navigation }: Props) {
       friction: 7,
       useNativeDriver: true,
     }).start();
+
+    // 背景极慢旋转
+    const bgLoop = Animated.loop(
+      Animated.timing(bgRotate, {
+        toValue: 1,
+        duration: 25000,
+        useNativeDriver: true,
+      })
+    );
+    bgLoop.start();
+
+    return () => bgLoop.stop();
   }, []);
 
   const handleSelect = (monster: Monster) => {
@@ -49,7 +65,19 @@ export default function MonsterSelectScreen({ navigation }: Props) {
       <StatusBar barStyle="light-content" />
 
       {/* 背景 */}
-      <View style={styles.bg} />
+      <View style={styles.bg}>
+        <Animated.View 
+          style={[
+            styles.nebula, 
+            { 
+              transform: [{ rotate: bgRotate.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['0deg', '360deg']
+              }) }] 
+            }
+          ]} 
+        />
+      </View>
 
       {/* 顶部标题 */}
       <Animated.View
@@ -59,7 +87,7 @@ export default function MonsterSelectScreen({ navigation }: Props) {
         ]}
       >
         <Text style={styles.headerTitle}>选择挑战目标</Text>
-        <Text style={styles.headerSub}>勇者，你要挑战哪只怪兽？</Text>
+        <Text style={styles.headerSub}>{childName || '小勇者'}，你要挑战哪只怪兽？</Text>
       </Animated.View>
 
       {/* 怪兽列表 */}
@@ -99,6 +127,7 @@ interface CardProps {
 function MonsterCard({ monster, index, onPress }: CardProps) {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const pressAnim = useRef(new Animated.Value(1)).current;
+  const idleAnim  = useRef(new Animated.Value(0)).current;
   const monsterImage = getMonsterImage(monster.themeId, monster.imageKey);
   const hpPercent = monster.currentHP / monster.maxHP;
 
@@ -112,6 +141,17 @@ function MonsterCard({ monster, index, onPress }: CardProps) {
         useNativeDriver: true,
       }),
     ]).start();
+
+    // 怪兽头像呼吸
+    const idleLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(idleAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
+        Animated.timing(idleAnim, { toValue: 0, duration: 1500, useNativeDriver: true }),
+      ])
+    );
+    idleLoop.start();
+
+    return () => idleLoop.stop();
   }, []);
 
   const handlePressIn = () => {
@@ -121,6 +161,7 @@ function MonsterCard({ monster, index, onPress }: CardProps) {
       friction: 10,
       useNativeDriver: true,
     }).start();
+    hapticMedium();
   };
 
   const handlePressOut = () => {
@@ -168,11 +209,22 @@ function MonsterCard({ monster, index, onPress }: CardProps) {
 
           {/* 怪兽形象 */}
           <View style={styles.monsterImgWrap}>
-            {monsterImage ? (
-              <Image source={monsterImage} style={styles.monsterImg} resizeMode="contain" />
-            ) : (
-              <Text style={styles.monsterEmoji}>{monster.icon}</Text>
-            )}
+            <Animated.View 
+              style={{
+                transform: [{ scale: idleAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 1.05]
+                }) }]
+              }}
+            >
+              {monsterImage ? (
+                <Image source={monsterImage} style={styles.monsterImg} resizeMode="contain" />
+              ) : monster.imageUri ? (
+                <Image source={{ uri: monster.imageUri }} style={styles.monsterImg} resizeMode="contain" />
+              ) : (
+                <Text style={styles.monsterEmoji}>{monster.icon}</Text>
+              )}
+            </Animated.View>
           </View>
 
           {/* 名字 */}
@@ -221,16 +273,17 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: '900',
-    color: '#FFD700',
-    textShadowColor: 'rgba(255,215,0,0.5)',
+    color: Colors.gold,
+    textShadowColor: 'rgba(255,215,0,0.6)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 12,
+    textShadowRadius: 15,
     letterSpacing: 2,
   },
   headerSub: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
-    marginTop: 4,
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 6,
+    fontWeight: '600',
   },
   grid: {
     flexDirection: 'row',
@@ -243,13 +296,23 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
   },
   card: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.25)',
+    padding: 14,
     alignItems: 'center',
     overflow: 'hidden',
+    ...Shadow.lg,
+  },
+  nebula: {
+    position: 'absolute',
+    width: 600,
+    height: 600,
+    borderRadius: 300,
+    backgroundColor: 'rgba(99, 102, 241, 0.15)', // 紫色系星云
+    top: '20%',
+    left: '-20%',
   },
   diffBadge: {
     position: 'absolute',
@@ -279,11 +342,14 @@ const styles = StyleSheet.create({
     fontSize: 64,
   },
   monsterName: {
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '900',
     color: '#fff',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   hpWrap: {
     width: '100%',
@@ -315,15 +381,16 @@ const styles = StyleSheet.create({
   },
   challengeBtn: {
     backgroundColor: '#FF6B35',
-    borderRadius: 10,
+    borderRadius: Radius.lg,
     paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingVertical: 10,
     width: '100%',
     alignItems: 'center',
+    ...Shadow.sm,
   },
   challengeText: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '900',
     color: '#fff',
   },
   emptyWrap: {

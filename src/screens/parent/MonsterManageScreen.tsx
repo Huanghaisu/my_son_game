@@ -11,8 +11,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useAppStore } from '../../store/useAppStore';
-import { Monster } from '../../store/types';
+import { Monster, DefeatedMonsterRecord } from '../../store/types';
 import { MONSTER_TEMPLATES, getMonsterDifficulty } from '../../constants/templates';
 import { MONSTER_THEMES, getMonsterImage } from '../../constants/monsterThemes';
 import type { MonsterTheme, MonsterTemplate } from '../../store/types';
@@ -45,12 +46,14 @@ const DIFF_COLORS: Record<string, string> = { easy: '#4CAF50', normal: '#FF8C00'
 const DIFF_LABELS: Record<string, string> = { easy: '简单', normal: '普通', hard: '困难' };
 
 export default function MonsterManageScreen({ navigation }: any) {
-  const { monsters, addMonster, deleteMonster } = useAppStore();
+  const { monsters, addMonster, deleteMonster, defeatedMonstersHistory, reAddMonsterFromHistory } = useAppStore();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [addMode, setAddMode] = useState<AddMode>('theme');
   const [selectedTheme, setSelectedTheme] = useState<MonsterTheme | null>(null);
   const [form, setForm] = useState<MonsterForm>(defaultMonsterForm());
+  const [historyExpanded, setHistoryExpanded] = useState(true);
+  const [reAddedIds, setReAddedIds] = useState<Set<string>>(new Set());
 
   const openAdd = () => {
     setForm(defaultMonsterForm());
@@ -90,19 +93,28 @@ export default function MonsterManageScreen({ navigation }: any) {
   };
 
   const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('提示', '我们需要访问相册才能上传怪兽图片哦');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled) {
-      setForm(f => ({ ...f, imageUri: result.assets[0].uri, imageKey: undefined, themeId: undefined }));
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('提示', '我们需要访问相册才能上传怪兽图片哦');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (!result.canceled) {
+        const tempUri = result.assets[0].uri;
+        const fileName = `monster_${Date.now()}.png`;
+        const permanentUri = FileSystem.documentDirectory + fileName;
+        await FileSystem.copyAsync({ from: tempUri, to: permanentUri });
+        setForm(f => ({ ...f, imageUri: permanentUri, imageKey: undefined, themeId: undefined }));
+      }
+    } catch (e) {
+      console.error('Pick monster image failed:', e);
+      Alert.alert('错误', '怪兽图片保存失败，请重试');
     }
   };
 
@@ -136,6 +148,11 @@ export default function MonsterManageScreen({ navigation }: any) {
   const diffFromHP = (hp: string) => {
     const n = parseInt(hp, 10);
     return isNaN(n) ? 'easy' : getMonsterDifficulty(n);
+  };
+
+  const handleReAdd = (record: DefeatedMonsterRecord) => {
+    reAddMonsterFromHistory(record.id);
+    setReAddedIds(prev => new Set([...prev, record.id]));
   };
 
   // 当前选中主题怪兽的预览图
@@ -209,6 +226,50 @@ export default function MonsterManageScreen({ navigation }: any) {
             </View>
           );
         })}
+
+        {/* ---- 历史怪兽分区 ----------------------------------- */}
+        {defeatedMonstersHistory.length > 0 && (
+          <View style={styles.historySection}>
+            <TouchableOpacity
+              style={styles.historySectionHeader}
+              onPress={() => setHistoryExpanded(v => !v)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.historySectionTitle}>
+                🏆 已击败历史（{defeatedMonstersHistory.length}）
+              </Text>
+              <Text style={styles.historyToggle}>{historyExpanded ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+
+            {historyExpanded && defeatedMonstersHistory.map((record) => {
+              const monImg = getMonsterImage(record.themeId, record.imageKey);
+              const added = reAddedIds.has(record.id);
+              return (
+                <View key={record.id} style={styles.historyCard}>
+                  {monImg ? (
+                    <Image source={monImg} style={styles.historyMonsterImage} />
+                  ) : record.imageUri ? (
+                    <Image source={{ uri: record.imageUri }} style={styles.historyMonsterImage} />
+                  ) : (
+                    <Text style={styles.historyMonsterEmoji}>{record.icon}</Text>
+                  )}
+                  <View style={styles.historyInfo}>
+                    <Text style={styles.historyName}>{record.name}</Text>
+                    <Text style={styles.historyMeta}>HP {record.maxHP} · {record.reward}</Text>
+                    <Text style={styles.historyDate}>击败于 {record.defeatDate}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.reAddBtn, added && styles.reAddBtnDone]}
+                    onPress={() => !added && handleReAdd(record)}
+                    activeOpacity={added ? 1 : 0.7}
+                  >
+                    <Text style={styles.reAddBtnText}>{added ? '✓ 已加入' : '复用'}</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        )}
 
         <View style={styles.diffGuide}>
           <Text style={styles.diffGuideTitle}>💡 难度参考</Text>
@@ -663,4 +724,30 @@ const styles = StyleSheet.create({
   },
   saveBtnDisabled: { backgroundColor: '#ccc' },
   saveBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+
+  // 历史怪兽分区
+  historySection: { marginTop: 4, marginBottom: 16 },
+  historySectionHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 10, paddingHorizontal: 4, marginBottom: 8,
+  },
+  historySectionTitle: { fontSize: 15, fontWeight: '700', color: '#555' },
+  historyToggle: { fontSize: 13, color: '#aaa', fontWeight: '700' },
+  historyCard: {
+    backgroundColor: '#fff', borderRadius: 14, padding: 12, marginBottom: 8,
+    flexDirection: 'row', alignItems: 'center',
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 1 },
+  },
+  historyMonsterImage: { width: 44, height: 44, borderRadius: 10, marginRight: 10, resizeMode: 'contain' },
+  historyMonsterEmoji: { fontSize: 34, marginRight: 10, width: 44, textAlign: 'center' },
+  historyInfo: { flex: 1 },
+  historyName: { fontSize: 15, fontWeight: '700', color: '#1A1A2E', marginBottom: 2 },
+  historyMeta: { fontSize: 12, color: '#888', marginBottom: 2 },
+  historyDate: { fontSize: 11, color: '#bbb' },
+  reAddBtn: {
+    backgroundColor: '#4CAF50', paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 10, minWidth: 68, alignItems: 'center',
+  },
+  reAddBtnDone: { backgroundColor: '#A5D6A7' },
+  reAddBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 });

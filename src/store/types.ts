@@ -81,6 +81,7 @@ export interface DefeatedMonsterRecord {
   name: string;
   icon: string;
   imageKey?: string;
+  imageUri?: string;
   themeId?: string;
   maxHP: number;
   attack: number;

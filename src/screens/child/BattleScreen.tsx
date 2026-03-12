@@ -209,15 +209,15 @@ export default function BattleScreen() {
         Animated.timing(attackFlash, { toValue: 0.62, duration: 140, useNativeDriver: true }),
         Animated.timing(attackFlash, { toValue: 0, duration: 140, useNativeDriver: true }),
         Animated.parallel([
-          Animated.timing(cardScale, { toValue: 1.45, duration: 210, useNativeDriver: true }),
-          Animated.timing(cardTY, { toValue: -SCREEN_H * 0.56, duration: 410, useNativeDriver: true }),
-          Animated.timing(cardOpacity, { toValue: 0, duration: 390, useNativeDriver: true }),
+          Animated.timing(cardScale, { toValue: 1.45, duration: 180, useNativeDriver: true }),
+          Animated.timing(cardTY, { toValue: -SCREEN_H * 0.56, duration: 320, useNativeDriver: true }),
+          Animated.timing(cardOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
         ]),
       ]).start(afterFlyOut);
     } else {
       Animated.parallel([
-        Animated.timing(cardTY, { toValue: -SCREEN_H * 0.48, duration: 330, useNativeDriver: true }),
-        Animated.timing(cardOpacity, { toValue: 0, duration: 310, useNativeDriver: true }),
+        Animated.timing(cardTY, { toValue: -SCREEN_H * 0.48, duration: 260, useNativeDriver: true }),
+        Animated.timing(cardOpacity, { toValue: 0, duration: 240, useNativeDriver: true }),
       ]).start(afterFlyOut);
     }
   };
@@ -339,13 +339,13 @@ export default function BattleScreen() {
         !isAnimatingRef.current && (Math.abs(gs.dy) > 8 || Math.abs(gs.dx) > 8),
       onPanResponderMove: (_, gs) => {
         cardTX.setValue(gs.dx * 0.5);
-        cardTY.setValue(gs.dy * 0.6);
+        cardTY.setValue(gs.dy * 0.9); // 提高灵敏度，更贴手
       },
       onPanResponderRelease: (_, gs) => {
         const { dx, dy } = gs;
-        if (dy < -60 && Math.abs(dx) < 70) {
+        if (dy < -35 && Math.abs(dx) < 80) { // 降低判定阈值，缩短动作路径
           gestureRef.current.onSwipeUp();
-        } else if (Math.abs(dx) > 70 && dy > -50) {
+        } else if (Math.abs(dx) > 70 && dy > -40) {
           gestureRef.current.onSwipeSide(dx);
         } else {
           Animated.parallel([

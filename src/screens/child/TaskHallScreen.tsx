@@ -266,13 +266,22 @@ function TaskItem({ task, onComplete }: TaskItemProps) {
             🔥 {task.streakCount > 0 ? `已连续 ${task.streakCount} 天！` : '连续打卡中'}
           </Text>
           <View style={styles.milestonePips}>
-            {task.streakMilestones.map(m => (
-              <View key={m.days} style={[styles.milestonePip, m.achieved && styles.milestonePipDone]}>
-                <Text style={[styles.milestonePipText, m.achieved && { color: '#fff' }]}>
-                  {m.achieved ? '✓ ' : ''}{m.days}天
-                </Text>
-              </View>
-            ))}
+            {task.streakMilestones.map(m => {
+              const mColor = m.days === 3 ? '#EA580C' : m.days === 7 ? '#7C3AED' : '#D97706';
+              return (
+                <View 
+                  key={m.days} 
+                  style={[
+                    styles.milestonePip, 
+                    m.achieved && { backgroundColor: mColor, borderColor: mColor }
+                  ]}
+                >
+                  <Text style={[styles.milestonePipText, m.achieved ? { color: '#fff' } : { color: mColor }]}>
+                    {m.achieved ? '✓ ' : ''}{m.days}天
+                  </Text>
+                </View>
+              );
+            })}
           </View>
         </View>
       )}

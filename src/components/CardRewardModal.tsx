@@ -25,7 +25,6 @@ interface CardRewardModalProps {
 const { width } = Dimensions.get('window');
 
 export default function CardRewardModal({ visible, task, onClose }: CardRewardModalProps) {
-  const card = task;
   const scale      = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(200)).current;
   const bgOpacity  = useRef(new Animated.Value(0)).current;
@@ -79,9 +78,9 @@ export default function CardRewardModal({ visible, task, onClose }: CardRewardMo
     }
   }, [visible]);
 
-  if (!card) return null;
+  if (!task) return null;
 
-  const isSkill     = card.type === 'hard';
+  const isSkill     = task.type === 'hard';
   const cardColor   = isSkill ? '#7C3AED' : '#2563EB';
   const cardBgColor = isSkill ? '#EDE9FE' : '#DBEAFE';
   const typeLabel   = isSkill ? '⚡ 绝招卡已点亮！' : '🗡️ 战斗卡已点亮！';
@@ -117,14 +116,14 @@ export default function CardRewardModal({ visible, task, onClose }: CardRewardMo
                 transform: [{ rotate: iconRotate }, { scale: iconScaleVal }],
                 marginBottom: 12,
               }}>
-                <Text style={styles.cardIcon}>{card.icon}</Text>
+                <Text style={styles.cardIcon}>{task.icon}</Text>
               </Animated.View>
 
               <Text style={[styles.cardTaskName, { color: cardColor }]} numberOfLines={1}>
-                {card.name}
+                {task.name}
               </Text>
               <View style={[styles.attackBadge, { backgroundColor: cardColor }]}>
-                <Text style={styles.attackText}>⚔️  攻击力 +{card.attackPower}</Text>
+                <Text style={styles.attackText}>⚔️  攻击力 +{task.attackPower}</Text>
               </View>
             </View>
           </View>

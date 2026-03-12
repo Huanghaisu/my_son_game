@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Monster } from '../../store/types';
 import { getMonsterImage } from '../../constants/monsterThemes';
+import { Colors, Shadow } from '../../constants/theme';
 
 interface Props {
   onEnter: () => void;
@@ -17,7 +18,7 @@ interface Props {
   monster: Monster | null;
 }
 
-export default function SplashScreen({ onEnter, childName, monster }: Props) {
+export default function SplashScreen({ onEnter, childName, childAvatar: _childAvatar, monster }: Props) {
   const bgGlow        = useRef(new Animated.Value(0)).current;
   const greetingOp   = useRef(new Animated.Value(0)).current;
   const greetingY    = useRef(new Animated.Value(-20)).current;
@@ -30,6 +31,7 @@ export default function SplashScreen({ onEnter, childName, monster }: Props) {
   const monsterOp    = useRef(new Animated.Value(0)).current;
   const challengeOp  = useRef(new Animated.Value(0)).current;
   const promptOp     = useRef(new Animated.Value(0)).current;
+  const rotateAnim   = useRef(new Animated.Value(0)).current;   // 底座旋转
 
   useEffect(() => {
     // 背景渐亮
@@ -76,15 +78,30 @@ export default function SplashScreen({ onEnter, childName, monster }: Props) {
       Animated.timing(challengeOp, { toValue: 1, duration: 350, useNativeDriver: true }),
     ]).start();
 
-    // 提示文字
-    Animated.sequence([
+    // 提示文字（常驻 + 呼吸效果）
+    const promptSeq = Animated.sequence([
       Animated.delay(1900),
-      Animated.timing(promptOp, { toValue: 1, duration: 350, useNativeDriver: true }),
-    ]).start();
+      Animated.timing(promptOp, { toValue: 1, duration: 450, useNativeDriver: true }),
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(promptOp, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+          Animated.timing(promptOp, { toValue: 1,   duration: 800, useNativeDriver: true }),
+        ])
+      ),
+    ]);
+    promptSeq.start();
 
-    // 3 秒后自动进入
-    const timer = setTimeout(onEnter, 3000);
-    return () => clearTimeout(timer);
+    // 底座旋转循环
+    const rotateLoop = Animated.loop(
+      Animated.timing(rotateAnim, { toValue: 1, duration: 4000, useNativeDriver: true })
+    );
+    rotateLoop.start();
+
+    return () => {
+      promptSeq.stop();
+      rotateLoop.stop();
+    };
+    // 取消 3 秒后自动进入，改为手动点击
   }, []);
 
   const bgColor = bgGlow.interpolate({
@@ -106,7 +123,7 @@ export default function SplashScreen({ onEnter, childName, monster }: Props) {
 
         {/* 装饰星点 */}
         {DECOR_STARS.map((s, i) => (
-          <Text key={i} style={[styles.decorStar, { left: s.x, top: s.y, fontSize: s.size }]}>✦</Text>
+          <StarItem key={i} x={s.x} y={s.y} size={s.size} delay={i * 200} />
         ))}
 
         {/* ── 问候语 ─────────────────────────────── */}
@@ -131,23 +148,42 @@ export default function SplashScreen({ onEnter, childName, monster }: Props) {
             ))}
           </View>
           <Animated.View style={{ transform: [{ scale: titleScale }], opacity: titleOpacity }}>
-            <Text style={styles.title}>小勇者</Text>
-            <Text style={styles.titleSub}>大冒险</Text>
+            <View>
+              <Text style={styles.title}>小勇者</Text>
+              <Text style={styles.titleSub}>大冒险</Text>
+            </View>
           </Animated.View>
         </View>
 
         {/* ── 怪兽出场区域 ───────────────────────── */}
         <Animated.View
           style={[
-            styles.monsterCard,
+            styles.monsterContainer,
             { transform: [{ scale: monsterScale }], opacity: monsterOp },
           ]}
         >
+          {monster && (
+            <Animated.View 
+              style={[
+                styles.magicCircle, 
+                { 
+                  transform: [{ rotate: rotateAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0deg', '360deg']
+                  }) }] 
+                }
+              ]} 
+            />
+          )}
+
+          <View style={styles.monsterCard}>
           {monster ? (
             <>
               {/* 怪兽图片或 emoji */}
               {monsterImageSource ? (
                 <Image source={monsterImageSource} style={styles.monsterImage} resizeMode="contain" />
+              ) : monster.imageUri ? (
+                <Image source={{ uri: monster.imageUri }} style={styles.monsterImage} resizeMode="contain" />
               ) : (
                 <Text style={styles.monsterEmoji}>{monster.icon}</Text>
               )}
@@ -179,6 +215,7 @@ export default function SplashScreen({ onEnter, childName, monster }: Props) {
               </Animated.View>
             </>
           )}
+          </View>
         </Animated.View>
 
         {/* ── 底部提示 ───────────────────────────── */}
@@ -197,6 +234,36 @@ export default function SplashScreen({ onEnter, childName, monster }: Props) {
   );
 }
 
+// ────────────────────────────────────────────────────────────
+// 辅助组件：动态星星
+// ────────────────────────────────────────────────────────────
+function StarItem({ x, y, size, delay }: { x: number; y: number; size: number; delay: number }) {
+  const opacity = useRef(new Animated.Value(0.2)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(opacity, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.2, duration: 1000, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  return (
+    <Animated.Text 
+      style={[
+        styles.decorStar, 
+        { left: x, top: y, fontSize: size, opacity }
+      ]}
+    >
+      ✦
+    </Animated.Text>
+  );
+}
+
 const DECOR_STARS = [
   { x: 20,  y: 60,  size: 10 },
   { x: 80,  y: 130, size: 7  },
@@ -206,6 +273,8 @@ const DECOR_STARS = [
   { x: 318, y: 360, size: 7  },
   { x: 140, y: 560, size: 9  },
   { x: 255, y: 500, size: 7  },
+  { x: 180, y: 250, size: 12 },
+  { x: 10,  y: 450, size: 6  },
 ];
 
 const styles = StyleSheet.create({
@@ -229,12 +298,12 @@ const styles = StyleSheet.create({
   greetingText: {
     fontSize: 20,
     color: 'rgba(255,255,255,0.75)',
-    letterSpacing: 1,
-    fontWeight: '500',
+    letterSpacing: 2,
+    fontWeight: '600',
   },
   greetingName: {
-    color: '#FFD700',
-    fontWeight: '800',
+    color: Colors.gold,
+    fontWeight: '900',
   },
 
   // 标题
@@ -251,63 +320,79 @@ const styles = StyleSheet.create({
     fontSize: 32,
   },
   title: {
-    fontSize: 52,
+    fontSize: 56,
     fontWeight: '900',
-    color: '#FFD700',
+    color: Colors.gold,
     textAlign: 'center',
-    textShadowColor: 'rgba(255,215,0,0.7)',
+    textShadowColor: 'rgba(255,215,0,0.8)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 22,
-    letterSpacing: 4,
+    textShadowRadius: 24,
+    letterSpacing: 6,
   },
   titleSub: {
-    fontSize: 44,
+    fontSize: 48,
     fontWeight: '900',
     color: '#FFA500',
     textAlign: 'center',
-    textShadowColor: 'rgba(255,165,0,0.6)',
+    textShadowColor: 'rgba(255,165,0,0.7)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 16,
-    letterSpacing: 4,
-    marginTop: -6,
+    textShadowRadius: 18,
+    letterSpacing: 6,
+    marginTop: -8,
   },
-
   // 怪兽卡片
+  monsterContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: 220,
+  },
+  magicCircle: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    borderWidth: 2,
+    borderColor: 'rgba(255,215,0,0.3)',
+    borderStyle: 'dashed',
+  },
   monsterCard: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 24,
-    paddingHorizontal: 32,
-    paddingVertical: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,215,0,0.25)',
-    width: '80%',
+    paddingHorizontal: 28,
+    paddingVertical: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,215,0,0.35)',
+    width: '75%',
     gap: 6,
+    ...Shadow.lg,
   },
   monsterImage: {
-    width: 120,
-    height: 120,
+    width: 110,
+    height: 110,
     marginBottom: 4,
   },
   monsterEmoji: {
-    fontSize: 72,
+    fontSize: 68,
     marginBottom: 4,
   },
   monsterName: {
     fontSize: 22,
-    fontWeight: '800',
-    color: '#FFD700',
+    fontWeight: '900',
+    color: Colors.gold,
     textAlign: 'center',
     textShadowColor: 'rgba(255,215,0,0.5)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 10,
   },
   challengeText: {
-    fontSize: 15,
-    color: 'rgba(255,200,100,0.9)',
+    fontSize: 14,
+    color: 'rgba(255,200,100,0.95)',
     textAlign: 'center',
     marginTop: 2,
-    letterSpacing: 1,
+    letterSpacing: 1.5,
+    fontWeight: '600',
   },
   hpRow: {
     flexDirection: 'row',
@@ -341,9 +426,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   prompt: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
-    letterSpacing: 2,
+    fontSize: 16,
+    color: Colors.gold,
+    letterSpacing: 3,
+    fontWeight: '700',
+    textShadowColor: 'rgba(255,215,0,0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
   },
   bottomIcons: {
     flexDirection: 'row',
