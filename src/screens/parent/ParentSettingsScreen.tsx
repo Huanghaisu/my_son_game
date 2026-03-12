@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppStore } from '../../store/useAppStore';
+import GoldCoin from '../../components/GoldCoin';
 
 const BLUE = '#4A6FA5';
 const BG = '#F0F4FF';
@@ -16,7 +17,7 @@ const BG = '#F0F4FF';
 const AVATARS = ['🦁', '🐯', '🐻', '🐼', '🐨', '🦊', '🐸', '🐧', '🦄', '🐬', '🦋', '🐝'];
 
 export default function ParentSettingsScreen() {
-  const { settings, updateSettings, verifyPIN, switchToChild } = useAppStore();
+  const { settings, points, updateSettings, verifyPIN, switchToChild, setPoints } = useAppStore();
 
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [pinStep, setPinStep] = useState<'verify' | 'new' | 'confirm'>('verify');
@@ -24,6 +25,10 @@ export default function ParentSettingsScreen() {
   const [newPin, setNewPin] = useState('');
   const [nameEditing, setNameEditing] = useState(false);
   const [nameInput, setNameInput] = useState(settings.childName);
+
+  // 金币管理 Modal
+  const [coinsModalVisible, setCoinsModalVisible] = useState(false);
+  const [coinsInput, setCoinsInput] = useState('');
 
   const openPinChange = () => {
     setPinStep('verify');
@@ -73,6 +78,36 @@ export default function ParentSettingsScreen() {
     Alert.alert('切换到儿童模式', '确定切换吗？', [
       { text: '取消', style: 'cancel' },
       { text: '切换', onPress: switchToChild },
+    ]);
+  };
+
+  const openCoinsModal = () => {
+    setCoinsInput(String(points));
+    setCoinsModalVisible(true);
+  };
+
+  const handleCoinsReset = () => {
+    Alert.alert('清零确认', `确定将金币清零吗？\n当前余额：${points} 枚`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '确认清零', style: 'destructive',
+        onPress: () => { setPoints(0); setCoinsModalVisible(false); },
+      },
+    ]);
+  };
+
+  const handleCoinsSave = () => {
+    const val = parseInt(coinsInput, 10);
+    if (isNaN(val) || val < 0) {
+      Alert.alert('提示', '请输入有效的金币数量（≥ 0）');
+      return;
+    }
+    Alert.alert('确认修改', `将金币余额设置为 ${val} 枚？`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '确认',
+        onPress: () => { setPoints(val); setCoinsModalVisible(false); },
+      },
     ]);
   };
 
@@ -179,6 +214,24 @@ export default function ParentSettingsScreen() {
           </View>
         </View>
 
+        {/* 金币管理 */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>💰 金币管理</Text>
+          <View style={styles.coinsRow}>
+            <View style={styles.coinsBalanceWrap}>
+              <GoldCoin size={28} />
+              <View style={styles.coinsTextWrap}>
+                <Text style={styles.coinsLabel}>当前余额</Text>
+                <Text style={styles.coinsValue}>{points} 枚</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.coinsEditBtn} onPress={openCoinsModal}>
+              <Text style={styles.coinsEditText}>✏️ 调整</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.coinsHint}>可手动修改余额或清零，适合兑换奖励后核对账目</Text>
+        </View>
+
         {/* 安全设置 */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>🔐 安全设置</Text>
@@ -195,6 +248,47 @@ export default function ParentSettingsScreen() {
 
         <Text style={styles.version}>小勇者大冒险 v1.0.0</Text>
       </ScrollView>
+
+      {/* 金币调整 Modal */}
+      <Modal visible={coinsModalVisible} animationType="fade" transparent>
+        <View style={styles.pinModalBg}>
+          <View style={styles.pinModalBox}>
+            <Text style={styles.pinModalTitle}>调整金币余额</Text>
+
+            {/* 当前余额 */}
+            <View style={styles.coinsCurrent}>
+              <GoldCoin size={22} />
+              <Text style={styles.coinsCurrentText}>当前：{points} 枚</Text>
+            </View>
+
+            {/* 输入新数值 */}
+            <Text style={styles.coinsInputLabel}>设置新的金币数量</Text>
+            <TextInput
+              style={styles.pinInput}
+              value={coinsInput}
+              onChangeText={v => setCoinsInput(v.replace(/\D/g, ''))}
+              keyboardType="number-pad"
+              placeholder="输入金币数量"
+              placeholderTextColor="#ccc"
+              autoFocus
+              maxLength={6}
+            />
+
+            {/* 操作按钮 */}
+            <View style={styles.pinBtnRow}>
+              <TouchableOpacity style={styles.pinCancelBtn} onPress={() => setCoinsModalVisible(false)}>
+                <Text style={styles.pinCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.coinsZeroBtn} onPress={handleCoinsReset}>
+                <Text style={styles.coinsZeroText}>清零</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.pinNextBtn} onPress={handleCoinsSave}>
+                <Text style={styles.pinNextText}>确认</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* PIN 修改 Modal */}
       <Modal visible={pinModalVisible} animationType="fade" transparent>
@@ -290,6 +384,36 @@ const styles = StyleSheet.create({
   },
   listRowText: { fontSize: 15, color: '#1A1A2E' },
   listRowArrow: { fontSize: 22, color: '#ccc' },
+
+  // 金币管理
+  coinsRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 10,
+  },
+  coinsBalanceWrap: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  coinsTextWrap: { gap: 2 },
+  coinsLabel: { fontSize: 12, color: '#888', fontWeight: '500' },
+  coinsValue: { fontSize: 22, fontWeight: '800', color: '#1A1A2E' },
+  coinsEditBtn: {
+    backgroundColor: '#FFF7E6', borderWidth: 1.5, borderColor: '#FFC107',
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8,
+  },
+  coinsEditText: { fontSize: 14, color: '#B8860B', fontWeight: '700' },
+  coinsHint: { fontSize: 12, color: '#aaa', lineHeight: 18 },
+
+  // 金币 Modal 专用
+  coinsCurrent: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FFF7E6', borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 10, marginBottom: 20, width: '100%',
+  },
+  coinsCurrentText: { fontSize: 16, fontWeight: '700', color: '#B8860B' },
+  coinsInputLabel: { fontSize: 13, color: '#888', fontWeight: '600', alignSelf: 'flex-start', marginBottom: 8 },
+  coinsZeroBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: 12,
+    backgroundColor: '#FFF0F0', borderWidth: 1.5, borderColor: '#FFB3B3', alignItems: 'center',
+  },
+  coinsZeroText: { fontSize: 15, color: '#F44336', fontWeight: '700' },
 
   switchBtn: {
     backgroundColor: BLUE, borderRadius: 16, paddingVertical: 16,

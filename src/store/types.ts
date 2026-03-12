@@ -188,6 +188,7 @@ export interface AppState {
   // Actions — 积分
   addPoints: (amount: number) => void;
   spendPoints: (amount: number) => boolean;
+  setPoints: (amount: number) => void;  // 家长手动设置金币总量
 
   // Actions — 商城
   addShopItem: (item: Omit<ShopItem, 'id'>) => void;

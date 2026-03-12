@@ -308,6 +308,10 @@ export const useAppStore = create<AppState>()(
         return true;
       },
 
+      setPoints: (amount) => {
+        set({ points: Math.max(0, Math.floor(amount)) });
+      },
+
       // ---- 商城 Actions ------------------------------------
 
       addShopItem: (itemData) => {
