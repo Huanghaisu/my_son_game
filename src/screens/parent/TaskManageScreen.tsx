@@ -56,8 +56,9 @@ export default function TaskManageScreen({ navigation }: any) {
 
   const openEdit = (task: Task) => {
     setEditingId(task.id);
+    const milestones = task.streakMilestones ?? [];
     const getMilestone = (days: 3 | 7 | 15) =>
-      task.streakMilestones.find(m => m.days === days)?.rewardDescription ?? '';
+      milestones.find(m => m.days === days)?.rewardDescription ?? '';
     setForm({
       name: task.name,
       icon: task.icon,
@@ -94,21 +95,21 @@ export default function TaskManageScreen({ navigation }: any) {
       if (form.milestone7.trim())  streakMilestones.push({ days: 7,  rewardDescription: form.milestone7.trim(),  achieved: getAchieved(7) });
       if (form.milestone15.trim()) streakMilestones.push({ days: 15, rewardDescription: form.milestone15.trim(), achieved: getAchieved(15) });
     }
-    const data = {
+    const base = {
       name: form.name.trim(),
       icon: form.icon,
       type: form.type,
       attackPower: ap,
       points: pts,
       timeRequirement: form.timeRequirement || undefined,
-      isEnabled: true,
       streakEnabled: form.streakEnabled,
       streakMilestones,
     };
     if (editingId) {
-      updateTask(editingId, data);
+      // 编辑时不覆盖 isEnabled，保留任务当前启用/禁用状态
+      updateTask(editingId, base);
     } else {
-      addTask(data);
+      addTask({ ...base, isEnabled: true });
     }
     setModalVisible(false);
   };
@@ -394,7 +395,7 @@ function TaskSection({
                   <Text style={styles.streakBadge}>
                     🔥 {task.streakCount > 0 ? `${task.streakCount}天` : '连续打卡'}
                   </Text>
-                  {task.streakMilestones.map(m => (
+                  {(task.streakMilestones ?? []).map(m => (
                     <View key={m.days} style={[styles.milestonePip, m.achieved && styles.milestonePipDone]}>
                       <Text style={[styles.milestonePipText, m.achieved && { color: '#fff' }]}>
                         {m.days}天{m.achieved ? '✓' : ''}

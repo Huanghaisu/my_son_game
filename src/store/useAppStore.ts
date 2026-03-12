@@ -170,11 +170,12 @@ export const useAppStore = create<AppState>()(
         }
 
         // 找出本次新达成的最高里程碑
-        const newlyAchieved = task.streakMilestones
+        const milestones = task.streakMilestones ?? [];
+        const newlyAchieved = milestones
           .filter(m => !m.achieved && newCount >= m.days)
           .sort((a, b) => b.days - a.days)[0] ?? null;
 
-        const updatedMilestones = task.streakMilestones.map((m) => ({
+        const updatedMilestones = milestones.map((m) => ({
           ...m,
           achieved: m.achieved || newCount >= m.days,
         }));
